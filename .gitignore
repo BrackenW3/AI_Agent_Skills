@@ -24,9 +24,29 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env*.local
+# -------------------------------------------------------
+# SECRETS & CREDENTIALS — never commit actual env files
+# -------------------------------------------------------
+# local env files (actual values — always gitignored)
 .env
+.env.local
+.env*.local
+*.env
+
+# Specific config env files (keep .env.template files, ignore filled-in .env files)
+config/vscode/.env
+config/n8n/.env
+config/atlassian/.env
+config/cloudflare/.env
+
+# API keys and secrets
+*.key
+*.secret
+*_secret*
+*_token*
+secrets.json
+secrets.yaml
+secrets.yml
 
 # vercel
 .vercel
@@ -34,3 +54,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+
+# OS files
+Thumbs.db
