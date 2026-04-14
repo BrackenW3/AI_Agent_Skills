@@ -5,11 +5,14 @@
 
 set -euo pipefail
 
+command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required. Install Python 3 and retry." >&2; exit 1; }
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 ROOT="$HOME"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --root)
+            [[ -z "${2:-}" ]] && { echo "Error: --root requires a path argument." >&2; exit 1; }
             ROOT="$2"
             shift 2
             ;;
@@ -83,7 +86,7 @@ resolve_text() {
         text="${text//\$\{$key\}/$val_escaped}"
     done
     # Clear any remaining unresolved placeholders
-    text="$(echo "$text" | sed 's/\${\([A-Z0-9_]*\)}\([^}]*\)/\2/g; s/\${\([A-Z0-9_]*\)}//g')"
+    text="$(echo "$text" | sed 's/\${[A-Z0-9_]*}//g')"
     echo "$text"
 }
 

@@ -93,7 +93,7 @@ function Resolve-TemplateText {
     }))
 }
 
-$registryRoot = Join-Path $Root 'AI_Agent_Skills'
+$registryRoot = Split-Path -Parent $PSScriptRoot
 $vsCodeRoot = Join-Path $Root 'VSCodespace'
 $envPath = Join-Path $vsCodeRoot '.env'
 $envMap = Get-EnvMap -Path $envPath
@@ -117,7 +117,11 @@ Write-JsonFile -Path (Join-Path $vsCodeRoot '.vscode\mcp.json') -Object $copilot
 
 $claudeTemplate = Get-Content -Raw -Path (Join-Path $registryRoot 'agents\claude\global-mcps.template.json') | ConvertFrom-Json -AsHashtable
 $claudeResolvedServers = (Resolve-TemplateValue -Value $claudeTemplate['mcpServers'] -EnvMap $envMap)
-$claudeCurrent = Get-Content -Raw -Path $claudePath | ConvertFrom-Json -AsHashtable
+if (Test-Path $claudePath) {
+    $claudeCurrent = Get-Content -Raw -Path $claudePath | ConvertFrom-Json -AsHashtable
+} else {
+    $claudeCurrent = @{}
+}
 $claudeCurrent['mcpServers'] = $claudeResolvedServers
 Write-JsonFile -Path $claudePath -Object $claudeCurrent
 
@@ -134,10 +138,15 @@ Write-JsonFile -Path $geminiPath -Object $geminiCurrent
 
 $jetbrainsTemplateText = Get-Content -Raw -Path (Join-Path $registryRoot 'agents\jetbrains\llm.mcpServers.template.xml')
 $jetbrainsResolved = Resolve-TemplateText -Text $jetbrainsTemplateText -EnvMap $envMap
-foreach ($version in @('2026.1', '2025.3')) {
-    $target = Join-Path $Root "AppData\Roaming\JetBrains\PyCharm$version\options\llm.mcpServers.xml"
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
-    [System.IO.File]::WriteAllText($target, $jetbrainsResolved, [System.Text.UTF8Encoding]::new($false))
+$jetbrainsBase = Join-Path $Root 'AppData\Roaming\JetBrains'
+if (Test-Path $jetbrainsBase) {
+    foreach ($dir in Get-ChildItem -Path $jetbrainsBase -Directory -Filter 'PyCharm*') {
+        $target = Join-Path $dir.FullName 'options\llm.mcpServers.xml'
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+        [System.IO.File]::WriteAllText($target, $jetbrainsResolved, [System.Text.UTF8Encoding]::new($false))
+    }
+} else {
+    Write-Host "No JetBrains directory found at $jetbrainsBase, skipping JetBrains sync."
 }
 
 Write-Host 'MCP templates synced to local configs.'
