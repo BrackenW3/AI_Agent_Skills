@@ -1,0 +1,24 @@
+name: Validate JSON Configs
+on:
+  push:
+    paths: ['mcp/**', 'agents/**']
+  pull_request:
+    paths: ['mcp/**', 'agents/**']
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate all JSON files
+        run: |
+          fail=0
+          while IFS= read -r -d '' f; do
+            if python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
+              echo "✓ $f"
+            else
+              echo "✗ $f INVALID"
+              fail=1
+            fi
+          done < <(find mcp/ agents/ -name '*.json' -print0)
+          exit $fail
