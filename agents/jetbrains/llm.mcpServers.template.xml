@@ -1,0 +1,78 @@
+<application>
+  <component name="McpApplicationServerCommands" modifiable="true">
+    <option name="servers">
+      <map>
+        <entry key="github">
+          <value>
+            <option name="command" value="npx" />
+            <option name="args">
+              <list>
+                <option value="-y" />
+                <option value="@modelcontextprotocol/server-github" />
+              </list>
+            </option>
+            <option name="env">
+              <map>
+                <entry key="GITHUB_PERSONAL_ACCESS_TOKEN" value="${GITHUB_MCP_PAT}" />
+                <entry key="GITHUB_TOKEN" value="${GITHUB_MCP_PAT}" />
+              </map>
+            </option>
+            <option name="enabled" value="true" />
+          </value>
+        </entry>
+        <entry key="filesystem">
+          <value>
+            <option name="command" value="npx" />
+            <option name="args">
+              <list>
+                <option value="-y" />
+                <option value="@modelcontextprotocol/server-filesystem" />
+                <option value="C:/Users/User/VSCodespace" />
+              </list>
+            </option>
+            <option name="env">
+              <map>
+                <entry key="FILESYSTEM_ALLOWED_PATH" value="${FILESYSTEM_ALLOWED_PATH}" />
+              </map>
+            </option>
+            <option name="enabled" value="true" />
+          </value>
+        </entry>
+        <entry key="openai">
+          <value>
+            <option name="command" value="npx" />
+            <option name="args">
+              <list>
+                <option value="-y" />
+                <option value="@modelcontextprotocol/server-openai" />
+              </list>
+            </option>
+            <option name="env">
+              <map>
+                <entry key="OPENAI_API_KEY" value="${OPENAI_API_KEY}" />
+              </map>
+            </option>
+            <option name="enabled" value="true" />
+          </value>
+        </entry>
+        <entry key="context7">
+          <value>
+            <option name="command" value="npx" />
+            <option name="args">
+              <list>
+                <option value="-y" />
+                <option value="@upstash/context7-mcp" />
+              </list>
+            </option>
+            <option name="env">
+              <map>
+                <entry key="CONTEXT7_API_KEY" value="${CONTEXT7_API_KEY}" />
+              </map>
+            </option>
+            <option name="enabled" value="true" />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</application>

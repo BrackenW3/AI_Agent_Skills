@@ -1,0 +1,13 @@
+{
+  "$comment": "Optional z-ai MCP server. Add to a project .mcp.json if you need Z.ai tools for that session. Not included in default sync — ~130 tools adds significant context overhead.",
+  "mcpServers": {
+    "z-ai": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "zai-mcp-server"],
+      "env": {
+        "ZAI_API_KEY": "${ZAI_API_KEY}"
+      }
+    }
+  }
+}
