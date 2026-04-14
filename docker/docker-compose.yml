@@ -1,0 +1,62 @@
+# AI Agent Skills — Docker Compose
+# Runs Claude Code with MCP servers as separate services
+# Usage: docker-compose --env-file ~/VSCodespace/.env up
+
+services:
+  claude:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ai-agent-skills:latest
+    volumes:
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - claude-home:/home/node/.claude
+    environment:
+      - ANTHROPIC_API_KEY
+      - GITHUB_MCP_PAT
+      - CONTEXT7_API_KEY
+      - PERPLEXITY_API_KEY
+      - FILESYSTEM_ALLOWED_PATH=/workspace
+    depends_on:
+      - mcp-github
+      - mcp-filesystem
+      - mcp-context7
+    stdin_open: true
+    tty: true
+    networks:
+      - mcp-net
+
+  mcp-github:
+    image: node:lts-slim
+    command: npx -y @modelcontextprotocol/server-github
+    environment:
+      - GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_MCP_PAT}
+      - GITHUB_TOKEN=${GITHUB_MCP_PAT}
+    restart: unless-stopped
+    networks:
+      - mcp-net
+
+  mcp-filesystem:
+    image: node:lts-slim
+    command: npx -y @modelcontextprotocol/server-filesystem /workspace
+    volumes:
+      - ${WORKSPACE_PATH:-./workspace}:/workspace:ro
+    restart: unless-stopped
+    networks:
+      - mcp-net
+
+  mcp-context7:
+    image: node:lts-slim
+    command: npx -y @upstash/context7-mcp
+    environment:
+      - CONTEXT7_API_KEY
+    restart: unless-stopped
+    networks:
+      - mcp-net
+
+volumes:
+  claude-home:
+
+networks:
+  mcp-net:
+    driver: bridge

@@ -1,5 +1,6 @@
 param(
-    [string]$Root = 'C:\Users\User'
+    [string]$Root = 'C:\Users\User',
+    [string]$Profile = "windows-full"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -94,6 +95,15 @@ function Resolve-TemplateText {
 }
 
 $registryRoot = Split-Path -Parent $PSScriptRoot
+
+# Load MCP profile
+$profileFile = Join-Path $registryRoot "mcp\profiles\$Profile.mcp.json"
+if (-not (Test-Path $profileFile)) {
+    Write-Warning "Profile '$Profile' not found at $profileFile, falling back to shared.mcp.json"
+    $profileFile = Join-Path $registryRoot 'mcp\shared.mcp.json'
+}
+Write-Host "-> Using MCP profile: $profileFile"
+
 $vsCodeRoot = Join-Path $Root 'VSCodespace'
 $envPath = Join-Path $vsCodeRoot '.env'
 $envMap = Get-EnvMap -Path $envPath

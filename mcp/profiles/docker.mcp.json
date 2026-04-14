@@ -1,0 +1,26 @@
+{
+  "$comment": "Docker profile — minimal set for containerized environments. Filesystem path is /workspace. Applied by sync.sh --profile docker",
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_MCP_PAT}",
+        "GITHUB_TOKEN": "${GITHUB_MCP_PAT}"
+      }
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+      "env": { "FILESYSTEM_ALLOWED_PATH": "/workspace" }
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env": { "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}" }
+    }
+  }
+}

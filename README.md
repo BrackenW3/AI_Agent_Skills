@@ -23,6 +23,36 @@ bash ~/AI_Agent_Skills/scripts/sync.sh
 
 The sync scripts read `~/VSCodespace/.env`, resolve all `${VAR}` placeholders, and write live configs for every supported agent.
 
+## Platform Profiles
+
+Sync scripts auto-detect your platform and apply the right profile. You can override with `--profile`:
+
+| Platform | MCP Profile | Plugin Profile | Auto-detected? |
+|----------|-------------|----------------|----------------|
+| Windows (full workstation) | `windows-full` | `settings.base.json` | ✓ via sync.ps1 |
+| macOS | `macos` | `settings.macos.json` | ✓ |
+| Linux / Ubuntu | `linux` | `settings.thin.json` | ✓ |
+| WSL2 | `linux` | `settings.thin.json` | ✓ |
+| Docker | `docker` | `settings.thin.json` | ✓ |
+
+**Override profile:**
+```bash
+bash scripts/sync.sh --profile macos          # force macOS profile
+.\scripts\sync.ps1 -Profile windows-full     # force Windows full profile
+```
+
+**MCP profiles** (in `mcp/profiles/`):
+- `windows-full` — github, filesystem, context7, perplexity, grok, brave-search, azure, jira
+- `macos` — github, filesystem, context7, perplexity, grok, brave-search
+- `linux` — github, filesystem, context7, perplexity, grok
+- `docker` — github, filesystem, context7 (minimal)
+- `zai-optional` — add to project `.mcp.json` when you need Z.ai tools
+
+**Plugin profiles** (in `agents/claude/`):
+- `settings.base.json` — 23 plugins (full workstation)
+- `settings.macos.json` — 15 plugins (macOS, no Windows-specific)
+- `settings.thin.json` — 14 plugins (laptop/VM/Docker, minimal)
+
 ## Repository Structure
 
 ```

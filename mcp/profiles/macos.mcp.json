@@ -1,5 +1,5 @@
 {
-  "$comment": "VS Code / GitHub Copilot MCP config. Written to VSCodespace/.vscode/mcp.json and VSCodespace/.mcp.json by sync scripts.",
+  "$comment": "macOS profile — no azure/jira (add per-project if needed). Applied by sync.sh --profile macos",
   "mcpServers": {
     "github": {
       "type": "stdio",
