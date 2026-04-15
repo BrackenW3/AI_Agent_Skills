@@ -5,6 +5,26 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# PS5.1 compat: ConvertFrom-Json | ConvertTo-Hashtable only exists in PS7+
+function ConvertTo-Hashtable {
+    param([Parameter(ValueFromPipeline)]$InputObject)
+    process {
+        if ($null -eq $InputObject) { return $null }
+        if ($InputObject -is [System.Collections.IDictionary]) { return $InputObject }
+        if ($InputObject -is [System.Collections.IEnumerable] -and $InputObject -isnot [string]) {
+            return @($InputObject | ForEach-Object { ConvertTo-Hashtable $_ })
+        }
+        if ($InputObject.GetType().Name -eq 'PSCustomObject') {
+            $hash = [ordered]@{}
+            foreach ($prop in $InputObject.PSObject.Properties) {
+                $hash[$prop.Name] = ConvertTo-Hashtable $prop.Value
+            }
+            return $hash
+        }
+        return $InputObject
+    }
+}
+
 function Get-EnvMap {
     param([string]$Path)
 
@@ -110,7 +130,7 @@ $envMap = Get-EnvMap -Path $envPath
 
 $claudePath = Join-Path $Root '.claude.json'
 if (Test-Path $claudePath) {
-    $claudeCurrent = Get-Content -Raw -Path $claudePath | ConvertFrom-Json -AsHashtable
+    $claudeCurrent = Get-Content -Raw -Path $claudePath | ConvertFrom-Json | ConvertTo-Hashtable
     if ($claudeCurrent.ContainsKey('mcpServers') -and $claudeCurrent['mcpServers'].ContainsKey('azure')) {
         $azureEnv = $claudeCurrent['mcpServers']['azure']['env']
         if ($azureEnv -and $azureEnv['PATH']) {
@@ -120,15 +140,15 @@ if (Test-Path $claudePath) {
 }
 
 $copilotTemplatePath = Join-Path $registryRoot 'agents\copilot\mcp.template.json'
-$copilotTemplate = Get-Content -Raw -Path $copilotTemplatePath | ConvertFrom-Json -AsHashtable
+$copilotTemplate = Get-Content -Raw -Path $copilotTemplatePath | ConvertFrom-Json | ConvertTo-Hashtable
 $copilotResolved = Resolve-TemplateValue -Value $copilotTemplate -EnvMap $envMap
 Write-JsonFile -Path (Join-Path $vsCodeRoot '.mcp.json') -Object $copilotResolved
 Write-JsonFile -Path (Join-Path $vsCodeRoot '.vscode\mcp.json') -Object $copilotResolved
 
-$claudeTemplate = Get-Content -Raw -Path (Join-Path $registryRoot 'agents\claude\global-mcps.template.json') | ConvertFrom-Json -AsHashtable
+$claudeTemplate = Get-Content -Raw -Path (Join-Path $registryRoot 'agents\claude\global-mcps.template.json') | ConvertFrom-Json | ConvertTo-Hashtable
 $claudeResolvedServers = (Resolve-TemplateValue -Value $claudeTemplate['mcpServers'] -EnvMap $envMap)
 if (Test-Path $claudePath) {
-    $claudeCurrent = Get-Content -Raw -Path $claudePath | ConvertFrom-Json -AsHashtable
+    $claudeCurrent = Get-Content -Raw -Path $claudePath | ConvertFrom-Json | ConvertTo-Hashtable
 } else {
     $claudeCurrent = @{}
 }
@@ -136,10 +156,10 @@ $claudeCurrent['mcpServers'] = $claudeResolvedServers
 Write-JsonFile -Path $claudePath -Object $claudeCurrent
 
 $geminiPath = Join-Path $Root '.gemini\settings.json'
-$geminiTemplate = Get-Content -Raw -Path (Join-Path $registryRoot 'agents\gemini\settings.patch.template.json') | ConvertFrom-Json -AsHashtable
+$geminiTemplate = Get-Content -Raw -Path (Join-Path $registryRoot 'agents\gemini\settings.patch.template.json') | ConvertFrom-Json | ConvertTo-Hashtable
 $geminiResolvedServers = (Resolve-TemplateValue -Value $geminiTemplate['mcpServers'] -EnvMap $envMap)
 if (Test-Path $geminiPath) {
-    $geminiCurrent = Get-Content -Raw -Path $geminiPath | ConvertFrom-Json -AsHashtable
+    $geminiCurrent = Get-Content -Raw -Path $geminiPath | ConvertFrom-Json | ConvertTo-Hashtable
 } else {
     $geminiCurrent = @{ theme = 'Default' }
 }
