@@ -15,7 +15,7 @@ function ConvertTo-Hashtable {
             return @($InputObject | ForEach-Object { ConvertTo-Hashtable $_ })
         }
         if ($InputObject.GetType().Name -eq 'PSCustomObject') {
-            $hash = [ordered]@{}
+            $hash = @{}
             foreach ($prop in $InputObject.PSObject.Properties) {
                 $hash[$prop.Name] = ConvertTo-Hashtable $prop.Value
             }
