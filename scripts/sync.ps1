@@ -15,7 +15,7 @@ function ConvertTo-Hashtable {
             return @($InputObject | ForEach-Object { ConvertTo-Hashtable $_ })
         }
         if ($InputObject.GetType().Name -eq 'PSCustomObject') {
-            $hash = [ordered]@{}
+            $hash = @{}
             foreach ($prop in $InputObject.PSObject.Properties) {
                 $hash[$prop.Name] = ConvertTo-Hashtable $prop.Value
             }
@@ -68,7 +68,7 @@ function Resolve-TemplateValue {
     }
 
     if ($Value -is [System.Collections.IDictionary]) {
-        $result = [ordered]@{}
+        $result = @{}
         foreach ($key in $Value.Keys) {
             $result[$key] = Resolve-TemplateValue -Value $Value[$key] -EnvMap $EnvMap
         }
@@ -177,6 +177,26 @@ if (Test-Path $jetbrainsBase) {
     }
 } else {
     Write-Host "No JetBrains directory found at $jetbrainsBase, skipping JetBrains sync."
+}
+
+# ── Claude Desktop ──────────────────────────────────────────────────────────
+$claudeDesktopTemplatePath = Join-Path $registryRoot 'agents\claude-desktop\mcp.template.json'
+$claudeDesktopOutputPath = Join-Path $Root 'AppData\Roaming\Claude\claude_desktop_config.json'
+
+if (Test-Path $claudeDesktopTemplatePath) {
+    $cdTemplate = Get-Content -Raw $claudeDesktopTemplatePath | ConvertFrom-Json | ConvertTo-Hashtable
+    $cdResolved = Resolve-TemplateValue -Value $cdTemplate -EnvMap $envMap
+
+    if (Test-Path $claudeDesktopOutputPath) {
+        $cdCurrent = Get-Content -Raw $claudeDesktopOutputPath | ConvertFrom-Json | ConvertTo-Hashtable
+    } else {
+        $cdCurrent = @{ preferences = @{} }
+    }
+    $cdCurrent['mcpServers'] = $cdResolved['mcpServers']
+    Write-JsonFile -Path $claudeDesktopOutputPath -Object $cdCurrent
+    Write-Host "-> Claude Desktop: $claudeDesktopOutputPath"
+} else {
+    Write-Warning "Claude Desktop template not found at $claudeDesktopTemplatePath — skipping."
 }
 
 Write-Host 'MCP templates synced to local configs.'
