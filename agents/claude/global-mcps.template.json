@@ -1,5 +1,5 @@
 {
-  "$comment": "Claude global MCP config — Windows full profile. Includes azure and jira (Windows-workstation specific). Written to ~/.claude.json mcpServers by sync scripts.",
+  "$comment": "Claude global MCP config — Windows full profile. Edit here, run scripts/sync.ps1 to push to ~/.claude.json, Gemini, and Copilot.",
   "mcpServers": {
     "github": {
       "type": "stdio",
@@ -34,12 +34,6 @@
       "args": ["-y", "mcp-server-xai-grok"],
       "env": { "XAI_API_KEY": "${XAI_API_KEY}" }
     },
-    "brave-search": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-      "env": { "BRAVE_API_KEY": "${BRAVE_API_KEY}" }
-    },
     "azure": {
       "type": "stdio",
       "command": "npx",
@@ -59,6 +53,39 @@
         "ATLASSIAN_BASE_URL": "${ATLASSIAN_BASE_URL}",
         "ATLASSIAN_EMAIL": "${ATLASSIAN_EMAIL}",
         "ATLASSIAN_API_TOKEN": "${ATLASSIAN_API_TOKEN}"
+      }
+    },
+    "supabase": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--access-token", "${SUPABASE_ACCESS_TOKEN}"]
+    },
+    "cloudflare": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@cloudflare/mcp-server-cloudflare", "run"],
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "${CLOUDFLARE_API_TOKEN}",
+        "CLOUDFLARE_ACCOUNT_ID": "${CLOUDFLARE_ACCOUNT_ID}"
+      }
+    },
+    "azure-postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "${AZURE_POSTGRES_CONNECTION_STRING}"]
+    },
+    "Neon": {
+      "type": "http",
+      "url": "https://mcp.neon.tech/mcp",
+      "headers": {
+        "Authorization": "${NEON_API_TOKEN}"
+      }
+    },
+    "cockroachdb-cloud": {
+      "type": "http",
+      "url": "https://cockroachlabs.cloud/mcp",
+      "headers": {
+        "mcp-cluster-id": "${COCKROACHDB_CLUSTER_ID}"
       }
     }
   }

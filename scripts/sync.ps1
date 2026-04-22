@@ -196,7 +196,7 @@ if (Test-Path $claudeDesktopTemplatePath) {
     Write-JsonFile -Path $claudeDesktopOutputPath -Object $cdCurrent
     Write-Host "-> Claude Desktop: $claudeDesktopOutputPath"
 } else {
-    Write-Warning "Claude Desktop template not found at $claudeDesktopTemplatePath — skipping."
+    Write-Warning "Claude Desktop template not found at $claudeDesktopTemplatePath - skipping."
 }
 
 Write-Host 'MCP templates synced to local configs.'
