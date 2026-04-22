@@ -54,21 +54,20 @@ for c in "${ENV_CANDIDATES[@]}"; do
 done
 
 if [[ -z "$ENV_FILE" ]]; then
-    echo ""
-    echo "  No .env file found. Options:"
-    echo "  a) Copy env/template.env → ~/VSCodespace/.env and fill in your API keys"
-    echo "  b) For Docker/CI: mount secrets as environment variables before running"
-    echo ""
-    echo "  Run again after creating the .env file."
-    echo ""
-    echo "  Template location: $REGISTRY_ROOT/env/template.env"
-    exit 0
+    echo "  ⚠  No .env found — skipping MCP sync."
+    echo "  To enable MCP sync later, create ~/VSCodespace/.env with your API keys"
+    echo "  then re-run: bash scripts/sync.sh"
+    SKIP_SYNC=true
+else
+    echo "  ✓ Found credentials at: $ENV_FILE"
+    SKIP_SYNC=false
 fi
-echo "  ✓ Found credentials at: $ENV_FILE"
 
-# 3. Run sync
-echo ""
-"$SCRIPT_DIR/sync.sh" --root "$ROOT"
+# 3. Run sync (only if .env exists)
+if [[ "$SKIP_SYNC" == false ]]; then
+    echo ""
+    "$SCRIPT_DIR/sync.sh" --root "$ROOT"
+fi
 
 # 4. Platform-specific post-steps
 echo ""
