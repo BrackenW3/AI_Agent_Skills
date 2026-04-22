@@ -39,6 +39,15 @@ config/n8n/.env
 config/atlassian/.env
 config/cloudflare/.env
 
+# SSH private keys — never commit these
+ssh-keys/
+*_ed25519
+*_rsa
+*_ecdsa
+id_ed25519
+id_rsa
+!*.pub
+
 # API keys and secrets
 *.key
 *.secret
