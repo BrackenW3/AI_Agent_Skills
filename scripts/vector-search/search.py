@@ -1,335 +1,346 @@
-"""Vector search query interface.
-
-Takes natural language queries, generates embeddings, and retrieves
-semantically similar documents from Supabase pgvector.
-
-Supports filtering by file source and customizable similarity thresholds.
-"""
-
+import os
+import sys
+import json
 import asyncio
-import logging
-from typing import Optional
-from dataclasses import dataclass
-
+import argparse
 import aiohttp
-import tiktoken
-from supabase import create_client
-
-from config import get_config
-
-
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+from dataclasses import dataclass
+from typing import Optional, Tuple
+import numpy as np
+from supabase import create_client, Client
+from supabase.lib.client_options import ClientOptions
 
 
 @dataclass
 class SearchResult:
-    """Result from vector similarity search."""
-    
-    file_path: str
-    file_source: str
-    chunk_text: str
-    similarity_score: float
-    chunk_index: int = 0
-    
-    def __str__(self) -> str:
-        """Format result for display."""
-        preview = self.chunk_text[:200] + "..." if len(self.chunk_text) > 200 else self.chunk_text
-        return (
-            f"[{self.similarity_score:.3f}] {self.file_source}: {self.file_path}\n"
-            f"    {preview}\n"
-        )
+    """Represents a vector search result."""
+    id: str
+    title: str
+    similarity: float
+    metadata: Optional[dict] = None
 
 
 class VectorSearchClient:
-    """Client for vector similarity search."""
-    
-    def __init__(self):
-        """Initialize search client."""
-        self.config = get_config()
-        self.supabase_client = create_client(
-            self.config.supabase.url,
-            self.config.supabase.api_key
-        )
-        self.encoding = tiktoken.encoding_for_model(self.config.azure_openai.embedding_model)
-        logger.info("Vector search client initialized")
-    
-    async def generate_query_embedding(
-        self,
-        query: str,
-        session: aiohttp.ClientSession,
-        max_retries: int = 3
-    ) -> Optional[list[float]]:
-        """Generate embedding for search query.
+    """Client for performing vector similarity searches against Supabase pgvector."""
+
+    def __init__(self, supabase_url: Optional[str] = None, supabase_key: Optional[str] = None):
+        """Initialize the vector search client.
         
         Args:
-            query: Natural language search query
-            session: aiohttp session
-            max_retries: Maximum retry attempts
-            
-        Returns:
-            Embedding vector or None if generation fails
+            supabase_url: Supabase project URL (defaults to SUPABASE_URL env var)
+            supabase_key: Supabase API key (defaults to SUPABASE_API_KEY env var)
+        
+        Raises:
+            ValueError: If required environment variables are not set
         """
-        headers = {
-            "api-key": self.config.azure_openai.api_key,
-            "Content-Type": "application/json"
-        }
+        # Use provided values or fall back to environment variables
+        self.supabase_url = supabase_url or os.getenv("SUPABASE_URL")
+        self.supabase_key = supabase_key or os.getenv("SUPABASE_API_KEY")
         
-        payload = {
-            "input": query,
-            "model": self.config.azure_openai.embedding_model
-        }
+        # Validate that required credentials are set
+        if not self.supabase_url:
+            raise ValueError("SUPABASE_URL not provided and not found in environment variables")
+        if not self.supabase_key:
+            raise ValueError("SUPABASE_API_KEY not provided and not found in environment variables")
         
-        for attempt in range(max_retries):
-            try:
-                async with session.post(
-                    f"{self.config.azure_openai.endpoint}/embeddings",
-                    json=payload,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=30)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        embedding = data["data"][0]["embedding"]
-                        token_count = len(self.encoding.encode(query))
-                        logger.debug(f"Generated query embedding ({token_count} tokens)")
-                        return embedding
-                    
-                    elif resp.status == 429:  # Rate limited
-                        wait_time = 2 ** attempt
-                        logger.warning(f"Rate limited, waiting {wait_time}s")
-                        await asyncio.sleep(wait_time)
-                    
-                    else:
-                        error_text = await resp.text()
-                        logger.error(f"API error {resp.status}: {error_text}")
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(2 ** attempt)
-            
-            except asyncio.TimeoutError:
-                logger.error(f"Timeout generating embedding (attempt {attempt + 1})")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
-            
-            except Exception as e:
-                logger.error(f"Error generating embedding: {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+        # Initialize Supabase client
+        options = ClientOptions(headers={"X-Client-Info": "vector-search-client"})
+        self.client: Client = create_client(self.supabase_url, self.supabase_key, options)
         
-        return None
-    
-    async def search(
-        self,
-        query: str,
-        top_k: int = 10,
-        similarity_threshold: float = 0.7,
-        file_source: Optional[str] = None
-    ) -> list[SearchResult]:
-        """Search for semantically similar documents.
+        # Azure OpenAI configuration
+        self.azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        self.azure_key = os.getenv("AZURE_OPENAI_KEY")
+        self.deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT", "text-embedding-3-small")
+
+    async def generate_query_embedding(self, query: str) -> list[float]:
+        """Generate embedding for a query using Azure OpenAI.
         
         Args:
-            query: Natural language search query
-            top_k: Number of results to return
-            similarity_threshold: Minimum similarity score (0.0 to 1.0)
-            file_source: Optional filter for source (onedrive, google_drive, local)
+            query: Natural language query string
             
         Returns:
-            List of search results
+            List of embedding values
         """
-        logger.info(f"Searching for: {query}")
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                # Generate query embedding
-                embedding = await self.generate_query_embedding(query, session)
-                
-                if embedding is None:
-                    logger.error("Failed to generate query embedding")
-                    return []
-                
-                # Query Supabase using match_documents function
-                try:
-                    response = self.supabase_client.rpc(
-                        "match_documents",
-                        {
-                            "query_embedding": embedding,
-                            "match_threshold": similarity_threshold,
-                            "match_count": top_k
-                        }
-                    ).execute()
-                    
-                    results = []
-                    for row in response.data:
-                        # Apply source filter if specified
-                        if file_source and row["file_source"] != file_source:
-                            continue
-                        
-                        result = SearchResult(
-                            file_path=row["file_path"],
-                            file_source=row["file_source"],
-                            chunk_text=row["chunk_text"],
-                            similarity_score=row["similarity"]
-                        )
-                        results.append(result)
-                    
-                    logger.info(f"Found {len(results)} results")
-                    return results
-                
-                except Exception as e:
-                    logger.error(f"Database query error: {e}")
-                    
-                    # Fallback: query documents table directly
-                    logger.info("Falling back to direct table query")
-                    query_obj = self.supabase_client.table("documents").select("*")
-                    
-                    if file_source:
-                        query_obj = query_obj.eq("file_source", file_source)
-                    
-                    response = query_obj.execute()
-                    results = []
-                    
-                    for row in response.data:
-                        # Calculate similarity manually if embedding not available
-                        if "embedding" in row:
-                            similarity = self._cosine_similarity(embedding, row["embedding"])
-                            
-                            if similarity >= similarity_threshold:
-                                result = SearchResult(
-                                    file_path=row["file_path"],
-                                    file_source=row["file_source"],
-                                    chunk_text=row["chunk_text"],
-                                    similarity_score=similarity,
-                                    chunk_index=row.get("chunk_index", 0)
-                                )
-                                results.append(result)
-                    
-                    # Sort by similarity and limit
-                    results.sort(key=lambda x: x.similarity_score, reverse=True)
-                    results = results[:top_k]
-                    
-                    logger.info(f"Found {len(results)} results (fallback)")
-                    return results
-        
-        except Exception as e:
-            logger.error(f"Search error: {e}")
-            return []
-    
-    @staticmethod
-    def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.azure_endpoint}/openai/deployments/{self.deployment_name}/embeddings?api-version=2024-02-15-preview"
+            headers = {
+                "api-key": self.azure_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "input": query,
+                "model": self.deployment_name
+            }
+            
+            async with session.post(url, json=payload, headers=headers) as response:
+                if response.status != 200:
+                    raise Exception(f"Failed to generate embedding: {await response.text()}")
+                result = await response.json()
+                return result["data"][0]["embedding"]
+
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors.
         
         Args:
-            vec_a: First vector
-            vec_b: Second vector
+            vec1: First vector
+            vec2: Second vector
             
         Returns:
-            Cosine similarity score (0.0 to 1.0)
+            Cosine similarity normalized to [0, 1]
         """
-        if len(vec_a) != len(vec_b):
+        try:
+            vec1 = np.array(vec1)
+            vec2 = np.array(vec2)
+            dot_product = np.dot(vec1, vec2)
+            norm1 = np.linalg.norm(vec1)
+            norm2 = np.linalg.norm(vec2)
+            
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+            
+            similarity = dot_product / (norm1 * norm2)
+            # Normalize to [0, 1] range
+            return max(0.0, min(1.0, similarity))
+        except (TypeError, ValueError) as e:
+            print(f"Error calculating similarity: {e}", file=sys.stderr)
             return 0.0
+
+    def _has_rpc_function(self, function_name: str) -> bool:
+        """Check if an RPC function exists in Supabase.
         
-        dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
-        mag_a = sum(a * a for a in vec_a) ** 0.5
-        mag_b = sum(b * b for b in vec_b) ** 0.5
+        Args:
+            function_name: Name of the RPC function to check
+            
+        Returns:
+            True if the function exists, False otherwise
+        """
+        try:
+            # Query the information_schema to check if the function exists
+            result = self.client.table("information_schema.routines").select("routine_name").eq(
+                "routine_name", function_name
+            ).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"Warning: Could not verify RPC function existence: {e}", file=sys.stderr)
+            return False
+
+    async def search(
+        self,
+        query: str,
+        limit: int = 10,
+        offset: int = 0,
+        threshold: float = 0.5
+    ) -> Tuple[list[SearchResult], int]:
+        """Search for similar documents.
         
-        if mag_a == 0 or mag_b == 0:
-            return 0.0
+        Args:
+            query: Natural language search query
+            limit: Maximum number of results to return
+            offset: Pagination offset
+            threshold: Minimum similarity threshold (0-1)
+            
+        Returns:
+            Tuple of (search results list, total count)
+        """
+        # Generate embedding for the query
+        query_embedding = await self.generate_query_embedding(query)
         
-        return dot_product / (mag_a * mag_b)
+        results = []
+        total_count = 0
+        
+        # Try using RPC function if it exists, otherwise fall back to direct table query
+        if self._has_rpc_function("match_documents"):
+            try:
+                response = self.client.rpc(
+                    "match_documents",
+                    {
+                        "query_embedding": query_embedding,
+                        "match_threshold": threshold,
+                        "match_count": limit
+                    }
+                ).execute()
+                
+                for row in response.data:
+                    similarity = self._cosine_similarity(query_embedding, row.get("embedding", []))
+                    if similarity >= threshold:
+                        results.append(
+                            SearchResult(
+                                id=row["id"],
+                                title=row.get("title", ""),
+                                similarity=similarity,
+                                metadata=row.get("metadata")
+                            )
+                        )
+                
+                total_count = len(results)
+            except Exception as e:
+                print(f"RPC call failed, falling back to direct query: {e}", file=sys.stderr)
+                # Fall through to direct table query
+        
+        # Fall back to direct table query if RPC is not available or failed
+        if not results:
+            try:
+                response = self.client.table("documents").select("*").order(
+                    "created_at", desc=True
+                ).range(offset, offset + limit - 1).execute()
+                
+                for row in response.data:
+                    try:
+                        # Handle embedding field (could be JSON string or list)
+                        embedding = row.get("embedding", [])
+                        if isinstance(embedding, str):
+                            embedding = json.loads(embedding)
+                        
+                        similarity = self._cosine_similarity(query_embedding, embedding)
+                        if similarity >= threshold:
+                            results.append(
+                                SearchResult(
+                                    id=row["id"],
+                                    title=row.get("title", ""),
+                                    similarity=similarity,
+                                    metadata=row.get("metadata")
+                                )
+                            )
+                    except (json.JSONDecodeError, TypeError) as e:
+                        print(f"Error processing document {row.get('id')}: {e}", file=sys.stderr)
+                        continue
+                
+                # Get total count for pagination
+                count_response = self.client.table("documents").select("count", count="exact").execute()
+                total_count = count_response.count if hasattr(count_response, 'count') else 0
+            except Exception as e:
+                print(f"Error querying documents: {e}", file=sys.stderr)
+        
+        # Sort by similarity descending
+        results.sort(key=lambda x: x.similarity, reverse=True)
+        
+        return results, total_count
 
 
 async def interactive_search():
-    """Run interactive search session."""
-    client = VectorSearchClient()
+    """Run the vector search client in interactive mode."""
+    try:
+        client = VectorSearchClient()
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     
-    print("\n=== Vector Search ===")
-    print("Commands:")
-    print("  search <query>           - Search for documents")
-    print("  search <query> --top 20  - Return top 20 results")
-    print("  search <query> --threshold 0.8  - Use custom similarity threshold")
-    print("  search <query> --source onedrive - Filter by source")
-    print("  exit                     - Exit search\n")
+    print("Vector Search Client")
+    print("Enter your search queries or 'quit' to exit")
+    print("-" * 50)
+    
+    page = 1
+    limit = 10
     
     while True:
         try:
-            user_input = input("Search> ").strip()
+            # Get user input
+            query = input("\nSearch query (or 'quit'): ").strip()
             
-            if not user_input:
-                continue
-            
-            if user_input.lower() == "exit":
-                print("Goodbye!")
+            if query.lower() == "quit":
                 break
             
-            # Parse command
-            parts = user_input.split()
-            if parts[0].lower() != "search":
-                print("Unknown command. Use 'search' or 'exit'")
+            if not query:
+                print("Please enter a valid query")
                 continue
             
-            query = " ".join(parts[1:])
-            top_k = 10
-            threshold = 0.7
-            source = None
+            # Perform search
+            offset = (page - 1) * limit
+            results, total_count = await client.search(query, limit=limit, offset=offset)
             
-            # Parse optional flags
-            if "--top" in query:
-                idx = query.index("--top")
-                query = query[:idx].strip()
-                try:
-                    top_k = int(query.split("--top")[1].split()[0])
-                except (IndexError, ValueError):
-                    top_k = 10
+            if not results:
+                print(f"No results found for query: {query}")
+                continue
             
-            if "--threshold" in query:
-                idx = query.index("--threshold")
-                query = query[:idx].strip()
-                try:
-                    threshold = float(query.split("--threshold")[1].split()[0])
-                except (IndexError, ValueError):
-                    threshold = 0.7
+            # Display results
+            print(f"\nResults for '{query}' (Page {page}, showing {len(results)} of {total_count} total):")
+            print("-" * 50)
+            for i, result in enumerate(results, 1):
+                print(f"{i}. {result.title}")
+                print(f"   ID: {result.id}")
+                print(f"   Similarity: {result.similarity:.4f}")
+                if result.metadata:
+                    print(f"   Metadata: {result.metadata}")
+                print()
             
-            if "--source" in query:
-                idx = query.index("--source")
-                query = query[:idx].strip()
-                try:
-                    source = query.split("--source")[1].split()[0]
-                except (IndexError, ValueError):
-                    source = None
-            
-            # Run search
-            results = await client.search(
-                query,
-                top_k=top_k,
-                similarity_threshold=threshold,
-                file_source=source
-            )
-            
-            if results:
-                print(f"\n=== Results ({len(results)} matches) ===\n")
-                for i, result in enumerate(results, 1):
-                    print(f"{i}. {result}")
-            else:
-                print("No results found.")
-            
-            print()
+            # Pagination prompt
+            if total_count > limit:
+                print(f"Total results: {total_count}")
+                print("Enter 'n' for next page, 'p' for previous page, or new query to search")
+                nav = input("Navigation: ").strip().lower()
+                
+                if nav == "n" and (page * limit) < total_count:
+                    page += 1
+                elif nav == "p" and page > 1:
+                    page -= 1
+                else:
+                    page = 1  # Reset to page 1 for new search
         
         except KeyboardInterrupt:
-            print("\n\nGoodbye!")
+            print("\nExiting...")
             break
         except Exception as e:
-            print(f"Error: {e}")
-            logger.exception("Search error")
+            print(f"Error: {e}", file=sys.stderr)
 
 
-async def main():
-    """Main entry point."""
-    await interactive_search()
+def main():
+    """Main entry point with CLI argument parsing."""
+    parser = argparse.ArgumentParser(description="Vector search interface for documents")
+    parser.add_argument("query", nargs="?", default=None, help="Search query")
+    parser.add_argument("--limit", type=int, default=10, help="Number of results per page (default: 10)")
+    parser.add_argument("--page", type=int, default=1, help="Page number for pagination (default: 1)")
+    parser.add_argument("--threshold", type=float, default=0.5, help="Similarity threshold (0-1, default: 0.5)")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Run in interactive mode")
+    
+    try:
+        args = parser.parse_args()
+    except SystemExit as e:
+        if e.code != 0:
+            sys.exit(1)
+        raise
+    
+    # If interactive mode or no query provided, run interactive search
+    if args.interactive or args.query is None:
+        try:
+            asyncio.run(interactive_search())
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Single query mode
+        try:
+            client = VectorSearchClient()
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        
+        try:
+            offset = (args.page - 1) * args.limit
+            results, total_count = asyncio.run(
+                client.search(args.query, limit=args.limit, offset=offset, threshold=args.threshold)
+            )
+            
+            if not results:
+                print(f"No results found for query: {args.query}")
+                sys.exit(0)
+            
+            print(f"Results for '{args.query}' (Page {args.page}, showing {len(results)} of {total_count} total):")
+            print("-" * 50)
+            for i, result in enumerate(results, 1):
+                print(f"{i}. {result.title}")
+                print(f"   ID: {result.id}")
+                print(f"   Similarity: {result.similarity:.4f}")
+                if result.metadata:
+                    print(f"   Metadata: {result.metadata}")
+            
+            if total_count > args.limit:
+                print(f"\nTotal results: {total_count}")
+                print(f"Use --page flag to view other pages (e.g., --page 2)")
+        
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

@@ -75,3 +75,10 @@ venv/
 
 # OS files
 Thumbs.db
+
+.tmp.driveupload/
+scripts/vector-search/index_metadata.db
+scripts/vector-search/nppBackup/
+reports/
+scripts/auto-configure-mcp.ps1
+scripts/laptop-full-setup.ps1

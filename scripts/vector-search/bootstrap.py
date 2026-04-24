@@ -13,6 +13,14 @@ Usage:
   python bootstrap.py
   python bootstrap.py --verbose
   python bootstrap.py --skip-tests
+
+Classes:
+  BootstrapStatus: Status tracking for bootstrap checks
+  DependencyChecker: Check and install Python dependencies
+  EnvConfigChecker: Check .env file configuration
+  AzureOpenAITester: Test Azure OpenAI connectivity and embeddings
+  SupabaseTester: Test Supabase connectivity and schema
+  DirectoryScanner: Scan configured directories for files to index
 """
 
 import os
@@ -34,14 +42,26 @@ logger = logging.getLogger(__name__)
 
 
 class BootstrapStatus:
-    """Status tracking for bootstrap checks."""
+    """Status tracking for bootstrap checks.
+    
+    Attributes:
+        checks (dict): Dictionary mapping component names to status results
+        ready (bool): Overall readiness status
+    """
     
     def __init__(self):
+        """Initialize BootstrapStatus with empty checks and ready=True."""
         self.checks = {}
         self.ready = True
     
     def record(self, component: str, status: bool, message: str = ""):
-        """Record a check result."""
+        """Record a check result.
+        
+        Args:
+            component (str): Name of the component being checked
+            status (bool): True if check passed, False if failed
+            message (str): Optional message describing the result
+        """
         self.checks[component] = {
             "status": "✓ OK" if status else "✗ FAIL",
             "message": message
@@ -50,7 +70,11 @@ class BootstrapStatus:
             self.ready = False
     
     def print_summary(self):
-        """Print formatted status summary."""
+        """Print formatted status summary.
+        
+        Returns:
+            bool: True if overall status is READY, False otherwise
+        """
         print("\n" + "=" * 70)
         print("BOOTSTRAP STATUS REPORT")
         print("=" * 70)
@@ -69,11 +93,19 @@ class BootstrapStatus:
 
 
 class DependencyChecker:
-    """Check and install Python dependencies."""
+    """Check and install Python dependencies.
+    
+    Attributes:
+        None (static methods only)
+    """
     
     @staticmethod
     def check_pip():
-        """Verify pip is available."""
+        """Verify pip is available.
+        
+        Returns:
+            bool: True if pip is available and functional, False otherwise
+        """
         try:
             subprocess.run(
                 ["pip", "--version"],
@@ -88,7 +120,16 @@ class DependencyChecker:
     
     @staticmethod
     def install_requirements(requirements_file: str = "requirements.txt"):
-        """Install requirements from requirements.txt."""
+        """Install requirements from requirements.txt.
+        
+        Uses sys.executable to ensure pip commands run in the current Python environment.
+        
+        Args:
+            requirements_file (str): Path to requirements.txt file
+            
+        Returns:
+            bool: True if installation successful, False otherwise
+        """
         try:
             if not Path(requirements_file).exists():
                 logger.error(f"requirements.txt not found: {requirements_file}")
@@ -96,7 +137,7 @@ class DependencyChecker:
             
             logger.info(f"Installing dependencies from {requirements_file}...")
             subprocess.run(
-                ["pip", "install", "-q", "-r", requirements_file],
+                [sys.executable, "-m", "pip", "install", "-q", "-r", requirements_file],
                 check=True,
                 timeout=120
             )
@@ -110,7 +151,11 @@ class DependencyChecker:
     
     @staticmethod
     def check_imports():
-        """Verify all required packages can be imported."""
+        """Verify all required packages can be imported.
+        
+        Returns:
+            tuple: (bool indicating success, list of missing packages)
+        """
         required_packages = [
             ("openai", "OpenAI"),
             ("supabase", "Supabase"),
@@ -133,22 +178,42 @@ class DependencyChecker:
 
 
 class EnvConfigChecker:
-    """Check .env file configuration."""
+    """Check .env file configuration.
+    
+    Attributes:
+        None (static methods only)
+    """
     
     @staticmethod
     def check_env_exists():
-        """Check if .env file exists."""
+        """Check if .env file exists.
+        
+        Returns:
+            bool: True if .env file exists, False otherwise
+        """
         return Path(".env").exists()
     
     @staticmethod
     def load_env():
-        """Load environment variables from .env."""
-        from dotenv import load_dotenv
-        return load_dotenv(".env")
+        """Load environment variables from .env.
+        
+        Returns:
+            bool: True if load was successful, False otherwise
+        """
+        try:
+            from dotenv import load_dotenv
+            return load_dotenv(".env")
+        except ImportError:
+            logger.error("python-dotenv not installed")
+            return False
     
     @staticmethod
     def check_required_vars():
-        """Check all required environment variables are set."""
+        """Check all required environment variables are set.
+        
+        Returns:
+            tuple: (bool indicating all vars set, list of missing variables)
+        """
         required_vars = [
             "AZURE_OPENAI_API_KEY",
             "AZURE_OPENAI_ENDPOINT",
@@ -166,7 +231,11 @@ class EnvConfigChecker:
     
     @staticmethod
     def validate_env_format():
-        """Validate environment variable values."""
+        """Validate environment variable values.
+        
+        Returns:
+            tuple: (bool indicating all formats valid, list of validation errors)
+        """
         errors = []
         
         # Check Azure OpenAI endpoint format
@@ -188,17 +257,28 @@ class EnvConfigChecker:
 
 
 class AzureOpenAITester:
-    """Test Azure OpenAI connectivity and embeddings."""
+    """Test Azure OpenAI connectivity and embeddings.
+    
+    Attributes:
+        None (static methods only)
+    """
     
     @staticmethod
     def test_connection():
-        """Test basic Azure OpenAI API connectivity."""
+        """Test basic Azure OpenAI API connectivity.
+        
+        Returns:
+            tuple: (bool indicating success, str message describing result)
+        """
         try:
             from openai import AzureOpenAI
             
             api_key = os.getenv("AZURE_OPENAI_API_KEY")
             endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
             api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+            
+            if not api_key or not endpoint:
+                return False, "Missing AZURE_OPENAI_API_KEY or AZURE_OPENAI_ENDPOINT"
             
             client = AzureOpenAI(
                 api_key=api_key,
@@ -225,7 +305,15 @@ class AzureOpenAITester:
     
     @staticmethod
     def estimate_embedding_cost(file_count: int, avg_tokens_per_file: int = 500):
-        """Estimate Azure OpenAI embedding costs."""
+        """Estimate Azure OpenAI embedding costs.
+        
+        Args:
+            file_count (int): Number of files to index
+            avg_tokens_per_file (int): Average tokens per file (default 500)
+            
+        Returns:
+            tuple: (int total tokens, float estimated cost in USD)
+        """
         # OpenAI text-embedding-3-small pricing (as of April 2026)
         # $0.02 per 1M tokens
         cost_per_million_tokens = 0.02
@@ -237,16 +325,27 @@ class AzureOpenAITester:
 
 
 class SupabaseTester:
-    """Test Supabase connectivity and schema."""
+    """Test Supabase connectivity and schema.
+    
+    Attributes:
+        None (static methods only)
+    """
     
     @staticmethod
     def test_connection():
-        """Test basic Supabase connectivity."""
+        """Test basic Supabase connectivity.
+        
+        Returns:
+            tuple: (bool indicating success, str message describing result)
+        """
         try:
             from supabase import create_client
             
             url = os.getenv("SUPABASE_URL")
             key = os.getenv("SUPABASE_API_KEY")
+            
+            if not url or not key:
+                return False, "Missing SUPABASE_URL or SUPABASE_API_KEY"
             
             supabase = create_client(url, key)
             
@@ -263,12 +362,19 @@ class SupabaseTester:
     
     @staticmethod
     def check_schema():
-        """Check if required Supabase tables exist."""
+        """Check if required Supabase tables exist.
+        
+        Returns:
+            tuple: (bool indicating all tables exist, str message describing result)
+        """
         try:
             from supabase import create_client
             
             url = os.getenv("SUPABASE_URL")
             key = os.getenv("SUPABASE_API_KEY")
+            
+            if not url or not key:
+                return False, "Missing SUPABASE_URL or SUPABASE_API_KEY"
             
             supabase = create_client(url, key)
             
@@ -293,14 +399,21 @@ class SupabaseTester:
 
 
 class DirectoryScanner:
-    """Scan configured directories for files to index."""
+    """Scan configured directories for files to index.
+    
+    Attributes:
+        None (static methods only)
+    """
     
     @staticmethod
     def scan_directories():
-        """Count files in configured directories."""
-        from config import IndexingConfig
+        """Count files in configured directories.
         
+        Returns:
+            tuple: (int total files, dict file counts by source)
+        """
         try:
+            from config import IndexingConfig
             config = IndexingConfig.from_env()
         except:
             return 0, {}
@@ -329,7 +442,15 @@ class DirectoryScanner:
     
     @staticmethod
     def estimate_indexing_time(file_count: int, avg_seconds_per_file: float = 0.5):
-        """Estimate total indexing time."""
+        """Estimate total indexing time.
+        
+        Args:
+            file_count (int): Number of files to index
+            avg_seconds_per_file (float): Average time per file in seconds
+            
+        Returns:
+            tuple: (float hours, float minutes)
+        """
         total_seconds = file_count * avg_seconds_per_file
         hours = total_seconds / 3600
         minutes = (total_seconds % 3600) / 60
@@ -338,7 +459,17 @@ class DirectoryScanner:
 
 
 def run_bootstrap(verbose: bool = False, skip_tests: bool = False):
-    """Run complete bootstrap sequence."""
+    """Run complete bootstrap sequence.
+    
+    Performs all validation checks and reports readiness status.
+    
+    Args:
+        verbose (bool): Enable verbose output (default False)
+        skip_tests (bool): Skip API connectivity tests (default False)
+        
+    Returns:
+        bool: True if all checks pass, False otherwise
+    """
     status = BootstrapStatus()
     
     print("\n" + "=" * 70)

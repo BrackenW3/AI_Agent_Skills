@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BrackenW3 Infrastructure Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e4e4e7; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+const StatusBadge = ({ status }) => {
+  const colors = { active: '#22c55e', planned: '#eab308', error: '#ef4444', degraded: '#f97316', new: '#3b82f6' };
+  return <span style={{ background: colors[status] || '#6b7280', padding: '2px 8px', borderRadius: 9999, fontSize: 11, fontWeight: 600, color: '#000', textTransform: 'uppercase' }}>{status}</span>;
+};
+
+const Card = ({ children, style }) => (
+  <div style={{ background: '#1a1b23', border: '1px solid #2a2b35', borderRadius: 12, padding: 20, ...style }}>{children}</div>
+);
+
+const DeviceMesh = () => {
+  const devices = [
+    { name: 'Desktop (CLX)', os: 'Windows 11 Pro', specs: '1.86TB SSD (485GB free) + 931GB Game + 3.73TB HDD', status: 'degraded', icon: '🖥️', extras: 'NVIDIA GPU · LG QHD · 96 node.exe (fixing)' },
+    { name: 'Laptop (i7)', os: 'Windows 11', specs: 'Storage TBD', status: 'active', icon: '💻', extras: 'Google Drive installed · Dispatch needed' },
+    { name: 'MacBook', os: 'macOS', specs: '2TB SSD + 1TB fast SSD + SD card', status: 'active', icon: '🍎', extras: 'Google Drive installed · Dispatch connected' }
+  ];
+  const connections = [
+    { from: 'Desktop', to: 'Laptop', type: 'SSH', status: 'planned', note: 'Keys generated, sshd needs admin' },
+    { from: 'Desktop', to: 'MacBook', type: 'SSH + Dispatch', status: 'partial', note: 'Dispatch active, SSH keys ready' },
+    { from: 'Laptop', to: 'MacBook', type: 'SSH', status: 'planned', note: 'Keys generated' },
+    { from: 'All', to: 'Cloud', type: 'OneDrive', status: 'active', note: '2 accounts: will.i.bracken + will.bracken.3' },
+    { from: 'All', to: 'Cloud', type: 'Google Drive', status: 'active', note: 'Consolidating to william3bracken@gmail.com' },
+    { from: 'All', to: 'GitHub', type: 'Git Sync', status: 'active', note: 'BrackenW3/AI_Agent_Skills + cloud-databases' }
+  ];
+
+  return <div>
+    <h3 style={{ fontSize: 18, marginBottom: 16, color: '#a78bfa' }}>Device Mesh — 3 Machines</h3>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+      {devices.map(d => (
+        <Card key={d.name} style={{ borderColor: d.status === 'degraded' ? '#f97316' : '#2a2b35' }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>{d.icon}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{d.name}</div>
+          <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>{d.os}</div>
+          <StatusBadge status={d.status} />
+          <div style={{ fontSize: 12, color: '#d1d5db', marginTop: 8 }}>{d.specs}</div>
+          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>{d.extras}</div>
+        </Card>
+      ))}
+    </div>
+    <h4 style={{ fontSize: 14, color: '#9ca3af', marginBottom: 8 }}>Connections</h4>
+    <div style={{ display: 'grid', gap: 8 }}>
+      {connections.map((c, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: '#1a1b23', borderRadius: 8, fontSize: 13 }}>
+          <span style={{ fontWeight: 600, minWidth: 120 }}>{c.from} → {c.to}</span>
+          <span style={{ color: '#a78bfa', minWidth: 100 }}>{c.type}</span>
+          <StatusBadge status={c.status} />
+          <span style={{ color: '#6b7280', fontSize: 12 }}>{c.note}</span>
+        </div>
+      ))}
+    </div>
+  </div>;
+};
+
+const DatabaseTopology = () => {
+  const dbs = [
+    { name: 'Supabase (pgvector)', role: 'Vector embeddings, document catalog, device registry, sync log', status: 'active', tables: 'documents, index_metadata, device_registry, sync_log, document_catalog, search_history', tier: 'Free (500MB)', region: 'us-east-1' },
+    { name: 'Cloudflare D1', role: 'Edge metadata, file index, device tracking, search queries', status: 'active', tables: 'devices, file_index, sync_log, search_queries', tier: 'Free (5GB)', region: 'WNAM (LAX)' },
+    { name: 'Cloudflare R2', role: 'Cold blob storage for archives', status: 'new', tables: 'cold-storage-archive, storagewebbucket, willbracken-logs', tier: 'Free (10GB)', region: 'ENAM' },
+    { name: 'Cloudflare KV', role: 'Fast key-value cache, agent secrets, dashboard state', status: 'active', tables: 'AI_USAGE_KV, agent-secrets, dashboard-cache + 3 more', tier: 'Free', region: 'Global' },
+    { name: 'Azure OpenAI', role: 'text-embedding-3-small (1536 dims) for vectorization', status: 'active', tables: 'Model: text-embedding-3-small', tier: '~$180 credits (~2 weeks)', region: 'East US' },
+    { name: 'CockroachDB', role: 'Distributed metadata, dedup catalog (planned expansion)', status: 'active', tables: 'Existing data, serverless cluster', tier: 'Free (5GB)', region: 'Multi-region' },
+    { name: 'Neon Postgres', role: 'Document catalog, dedup tracking, search history', status: 'planned', tables: 'document_catalog, search_history, document_embeddings', tier: 'Free (5GB, pgvector)', region: 'TBD' },
+    { name: 'DuckDB', role: 'Local analytics engine, Google Drive bridge, Parquet processing', status: 'error', tables: 'Local per-device — gdrive-duckdb-bridge.py has bugs', tier: 'Free (local)', region: 'Local' },
+    { name: 'Neo4j', role: 'Knowledge graph for document relationships (post-analytics)', status: 'planned', tables: 'Nodes: Documents, People, Topics; Edges: references, mentions', tier: 'Desktop installed', region: 'Local' }
+  ];
+
+  return <div>
+    <h3 style={{ fontSize: 18, marginBottom: 16, color: '#a78bfa' }}>Database Topology — {dbs.length} Services</h3>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+      {dbs.map(db => (
+        <Card key={db.name}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>{db.name}</span>
+            <StatusBadge status={db.status} />
+          </div>
+          <div style={{ fontSize: 12, color: '#d1d5db', marginBottom: 6 }}>{db.role}</div>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>📊 {db.tables}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#4b5563' }}>
+            <span>{db.tier}</span><span>{db.region}</span>
+          </div>
+        </Card>
+      ))}
+    </div>
+  </div>;
+};
+
+const PipelineStages = () => {
+  const stages = [
+    { num: 1, name: 'BOOTSTRAP', script: 'bootstrap.ps1 / .sh', desc: 'Platform detection, dependency check, env setup', status: 'active', errors: 'Minor: undefined $RegistryRoot, missing sync.ps1 validation' },
+    { num: 2, name: 'SYNC', script: 'sync.ps1 / .sh', desc: 'MCP config merge across Claude/VSCode/Gemini/JetBrains', status: 'active', errors: 'Minor: undefined $Root, UTF-8 BOM issues, jq dependency' },
+    { num: 3, name: 'INDEX', script: 'vector-search/indexer.py', desc: 'Scan files → chunk → embed via Azure OpenAI → store in Supabase', status: 'error', errors: 'CRITICAL: Missing imports (BytesIO, aiohttp, pypdf), async/sync mixing' },
+    { num: 4, name: 'SEARCH', script: 'vector-search/search.py', desc: 'Query embedding → cosine similarity via match_documents()', status: 'error', errors: 'CRITICAL: Missing os import, broken CLI parsing, no pagination' },
+    { num: 5, name: 'ORGANIZE', script: 'partition-gdrive.py', desc: 'Classify files by type, move to taxonomy folders in GDrive', status: 'error', errors: 'CRITICAL: Missing imports, incomplete MIME types, no folder creation' },
+    { num: 6, name: 'BRIDGE', script: 'gdrive-duckdb-bridge.py', desc: 'Mount GDrive data in DuckDB for local analytics & SQL queries', status: 'error', errors: 'CRITICAL: Missing pyarrow import, hardcoded paths, no file validation' },
+    { num: 7, name: 'CLEANUP', script: 'cleanup-gdrive.py', desc: 'Detect duplicates across GDrive accounts, remove redundant files', status: 'error', errors: 'CRITICAL: Broken file hashing, missing move() logic, no rate limiting' },
+    { num: 8, name: 'BACKUP', script: 'backup.ps1', desc: 'robocopy/rsync to HDD (H:) or remote via SSH', status: 'active', errors: 'Minor: Hardcoded scp path, no BOM stripping on manifest JSON' }
+  ];
+
+  return <div>
+    <h3 style={{ fontSize: 18, marginBottom: 16, color: '#a78bfa' }}>Pipeline Stages — Bootstrap → Backup</h3>
+    <div style={{ display: 'grid', gap: 8 }}>
+      {stages.map(s => (
+        <div key={s.num} style={{ display: 'grid', gridTemplateColumns: '40px 120px 200px 1fr auto', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#1a1b23', borderRadius: 8, borderLeft: `3px solid ${s.status === 'error' ? '#ef4444' : '#22c55e'}` }}>
+          <span style={{ fontSize: 20, fontWeight: 800, color: s.status === 'error' ? '#ef4444' : '#22c55e' }}>{s.num}</span>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</span>
+          <span style={{ fontSize: 12, color: '#a78bfa', fontFamily: 'monospace' }}>{s.script}</span>
+          <div>
+            <div style={{ fontSize: 12, color: '#d1d5db' }}>{s.desc}</div>
+            <div style={{ fontSize: 11, color: s.status === 'error' ? '#fca5a5' : '#6b7280', marginTop: 2 }}>{s.errors}</div>
+          </div>
+          <StatusBadge status={s.status} />
+        </div>
+      ))}
+    </div>
+  </div>;
+};
+
+const StoragePlan = () => {
+  const tiers = [
+    { tier: 'HOT', color: '#ef4444', desc: 'Active development, real-time queries, vector search', items: [
+      { name: 'SSD (C: drive)', capacity: '1.86 TB', used: '1.38 TB', purpose: 'Active dev, OS, apps' },
+      { name: 'Supabase pgvector', capacity: '500 MB', used: '~1 MB', purpose: 'Embeddings, search, device registry' },
+      { name: 'Cloudflare D1', capacity: '5 GB', used: '172 KB', purpose: 'Edge queries, file metadata' },
+      { name: 'Cloudflare KV', capacity: 'Unlimited reads', used: '6 namespaces', purpose: 'Agent secrets, cache, config' },
+    ]},
+    { tier: 'WARM', color: '#eab308', desc: 'Shared documents, synced files, analytics workloads', items: [
+      { name: 'Google Drive (main)', capacity: '15 GB', used: 'TBD', purpose: 'Shared docs, consolidate from willbracken33' },
+      { name: 'OneDrive (2 accts)', capacity: '5 GB each', used: 'Active sync', purpose: 'Cross-device document sync' },
+      { name: 'DuckDB (local)', capacity: 'Unlimited', used: 'Per-query', purpose: 'Analytics on GDrive/Parquet data' },
+      { name: 'CockroachDB', capacity: '5 GB free', used: 'Existing data', purpose: 'Distributed metadata, dedup catalog' },
+      { name: 'Neon Postgres', capacity: '5 GB free', used: 'Planned', purpose: 'Document catalog, search history' },
+    ]},
+    { tier: 'COLD', color: '#3b82f6', desc: 'Archives, backups, historical data, bulk storage', items: [
+      { name: 'HDD H: drive', capacity: '3.73 TB', used: '12 GB', purpose: 'Local archive — videos, music, old projects' },
+      { name: 'Cloudflare R2', capacity: '10 GB free', used: '0 GB', purpose: 'Cloud archive blobs, cold-storage-archive bucket' },
+      { name: 'iDrive', capacity: '1000 TB', used: 'Multiple old PCs', purpose: 'Historical backups — needs consolidation' },
+      { name: 'NordCloud (NordLocker)', capacity: '3 TB', used: 'Unused', purpose: 'Additional encrypted cloud backup' },
+      { name: 'Game Drive G:', capacity: '931 GB', used: '592 GB', purpose: 'Game files only — do not index' },
+    ]}
+  ];
+
+  return <div>
+    <h3 style={{ fontSize: 18, marginBottom: 16, color: '#a78bfa' }}>Storage Tiering — Hot / Warm / Cold</h3>
+    {tiers.map(t => (
+      <div key={t.tier} style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ background: t.color, width: 12, height: 12, borderRadius: '50%', display: 'inline-block' }}></span>
+          <span style={{ fontWeight: 700, fontSize: 16 }}>{t.tier}</span>
+          <span style={{ fontSize: 12, color: '#6b7280' }}> — {t.desc}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+          {t.items.map(item => (
+            <Card key={item.name} style={{ padding: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{item.name}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9ca3af' }}>
+                <span>Capacity: {item.capacity}</span><span>Used: {item.used}</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>{item.purpose}</div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>;
+};
+
+const App = () => {
+  const [tab, setTab] = useState(0);
+  const tabs = ['Device Mesh', 'Databases', 'Pipeline', 'Storage'];
+  const panels = [<DeviceMesh />, <DatabaseTopology />, <PipelineStages />, <StoragePlan />];
+
+  return <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
+    <div style={{ marginBottom: 24 }}>
+      <h1 style={{ fontSize: 28, fontWeight: 800, background: 'linear-gradient(135deg, #a78bfa, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>BrackenW3 Infrastructure</h1>
+      <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>3 Devices · 9 Databases · 8 Pipeline Stages · 5 Storage Tiers</p>
+    </div>
+    <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #2a2b35', paddingBottom: 8 }}>
+      {tabs.map((t, i) => (
+        <button key={t} onClick={() => setTab(i)} style={{
+          padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600,
+          background: tab === i ? '#a78bfa' : 'transparent', color: tab === i ? '#000' : '#6b7280',
+          transition: 'all 0.2s'
+        }}>{t}</button>
+      ))}
+    </div>
+    {panels[tab]}
+    <div style={{ marginTop: 32, padding: 16, background: '#1a1b23', borderRadius: 8, fontSize: 12, color: '#4b5563' }}>
+      Generated 2026-04-22 · Supabase: smttdhtpwkowcyatoztb (us-east-1) · Cloudflare: a429049d · Azure: ~$180 credits, ~2 weeks
+    </div>
+  </div>;
+};
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/desktop-commander"],
+      "env": {},
+      "_comment": "Desktop Commander MCP — filesystem, process management, shell on Windows/Mac/Linux"
+    }
+  }
+}
