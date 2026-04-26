@@ -1,0 +1,17 @@
+{
+  "machine": "CLX-DESKTOP",
+  "user": "User",
+  "created": "2026-04-22",
+  "backed_up": [
+    "SSH keys + config",
+    "Claude Code settings + skills",
+    "Claude global MCP config",
+    "Gemini CLI settings",
+    "Global git config",
+    "VSCode settings",
+    "VSCode keybindings",
+    "VSCode snippets",
+    "Claude Desktop config",
+    "AI Agent Skills repo"
+  ]
+}

@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""DuckDB local analytics setup.
+
+Creates a DuckDB database with tables mirroring Supabase schema,
+sets up Google Drive parquet bridge, and provides query interface.
+
+Usage:
+    python setup-duckdb.py              # Interactive setup
+    python setup-duckdb.py --init       # Create DB + tables only
+    python setup-duckdb.py --sync       # Sync from Supabase
+    python setup-duckdb.py --query "SELECT ..."  # Run a query
+"""
+
+import os
+import sys
+import argparse
+import json
+from pathlib import Path
+from datetime import datetime
+
+def check_deps():
+    """Check and install required dependencies."""
+    missing = []
+    for pkg, import_name in [("duckdb", "duckdb"), ("requests", "requests"), ("pandas", "pandas")]:
+        try:
+            __import__(import_name)
+        except ImportError:
+            missing.append(pkg)
+    if missing:
+        print(f"Installing missing packages: {', '.join(missing)}")
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--break-system-packages", "-q"])
+        print("Dependencies installed.")
+
+check_deps()
+
+import duckdb
+import requests
+import pandas as pd
+
+
+# --- Configuration ---
+DB_PATH = os.getenv("DUCKDB_PATH", str(Path.home() / "AI_Agent_Skills" / "data" / "analytics.duckdb"))
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_API_KEY", "")
+PARQUET_DIR = os.getenv("PARQUET_DIR", str(Path.home() / "AI_Agent_Skills" / "data" / "parquet"))
+
+
+def init_db(db_path: str = DB_PATH) -> duckdb.DuckDBPyConnection:
+    """Initialize DuckDB with analytics schema."""
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    os.makedirs(PARQUET_DIR, exist_ok=True)
+    
+    conn = duckdb.connect(db_path)
+    
+    # Core tables matching Supabase schema
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS documents (
+            id VARCHAR PRIMARY KEY,
+            title VARCHAR,
+            content TEXT,
+            file_path VARCHAR,
+            file_type VARCHAR,
+            file_size BIGINT,
+            device_name VARCHAR,
+            embedding FLOAT[1536],
+            metadata JSON,
+            created_at TIMESTAMP DEFAULT current_timestamp,
+            updated_at TIMESTAMP DEFAULT current_timestamp
+        )
+    """)
+    
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS device_registry (
+            id VARCHAR PRIMARY KEY,
+            name VARCHAR UNIQUE,
+            device_type VARCHAR,
+            os_type VARCHAR,
+            os_version VARCHAR,
+            storage_paths JSON,
+            last_seen TIMESTAMP,
+            status VARCHAR DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT current_timestamp
+        )
+    """)
+    
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS document_catalog (
+            id VARCHAR PRIMARY KEY,
+            file_path VARCHAR,
+            file_name VARCHAR,
+            file_type VARCHAR,
+            file_size BIGINT,
+            file_hash VARCHAR,
+            device_name VARCHAR,
+            cloud_provider VARCHAR,
+            storage_tier VARCHAR,
+            last_modified TIMESTAMP,
+            indexed BOOLEAN DEFAULT false,
+            created_at TIMESTAMP DEFAULT current_timestamp
+        )
+    """)
+    
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS index_metadata (
+            id VARCHAR PRIMARY KEY,
+            document_id VARCHAR,
+            chunk_index INTEGER,
+            chunk_text TEXT,
+            token_count INTEGER,
+            embedding_model VARCHAR,
+            indexed_at TIMESTAMP DEFAULT current_timestamp
+        )
+    """)
+    
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS search_history (
+            id VARCHAR PRIMARY KEY,
+            query_text TEXT,
+            results_count INTEGER,
+            top_score FLOAT,
+            search_params JSON,
+            searched_at TIMESTAMP DEFAULT current_timestamp
+        )
+    """)
+    
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sync_log (
+            id VARCHAR PRIMARY KEY,
+            source VARCHAR,
+            target VARCHAR,
+            records_synced INTEGER,
+            status VARCHAR,
+            error_message TEXT,
+            synced_at TIMESTAMP DEFAULT current_timestamp
+        )
+    """)
+    
+    # Analytics views
+    conn.execute("""
+        CREATE OR REPLACE VIEW storage_summary AS
+        SELECT 
+            device_name,
+            cloud_provider,
+            storage_tier,
+            COUNT(*) as file_count,
+            SUM(file_size) as total_bytes,
+            ROUND(SUM(file_size) / 1048576.0, 2) as total_mb,
+            COUNT(CASE WHEN indexed THEN 1 END) as indexed_count
+        FROM document_catalog
+        GROUP BY device_name, cloud_provider, storage_tier
+        ORDER BY total_bytes DESC
+    """)
+    
+    conn.execute("""
+        CREATE OR REPLACE VIEW index_progress AS
+        SELECT
+            d.device_name,
+            COUNT(DISTINCT dc.id) as total_files,
+            COUNT(DISTINCT CASE WHEN dc.indexed THEN dc.id END) as indexed_files,
+            ROUND(100.0 * COUNT(DISTINCT CASE WHEN dc.indexed THEN dc.id END) / 
+                  NULLIF(COUNT(DISTINCT dc.id), 0), 1) as pct_indexed,
+            COUNT(DISTINCT im.id) as total_chunks,
+            MAX(im.indexed_at) as last_indexed
+        FROM document_catalog dc
+        LEFT JOIN index_metadata im ON dc.id = im.document_id
+        LEFT JOIN documents d ON dc.id = d.id
+        GROUP BY d.device_name
+    """)
+    
+    print(f"DuckDB initialized at: {db_path}")
+    print(f"Parquet directory: {PARQUET_DIR}")
+    
+    # Report table counts
+    tables = conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main' AND table_type='BASE TABLE'").fetchall()
+    print(f"Tables: {', '.join(t[0] for t in tables)}")
+    
+    views = conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main' AND table_type='VIEW'").fetchall()
+    print(f"Views: {', '.join(v[0] for v in views)}")
+    
+    return conn
+
+
+def sync_from_supabase(conn: duckdb.DuckDBPyConnection, table: str = "all"):
+    """Pull data from Supabase REST API into DuckDB."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("ERROR: SUPABASE_URL and SUPABASE_API_KEY must be set in .env")
+        return
+    
+    tables_to_sync = ["device_registry", "document_catalog", "documents", "index_metadata", "search_history", "sync_log"]
+    if table != "all":
+        tables_to_sync = [table]
+    
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    for tbl in tables_to_sync:
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/{tbl}?select=*&limit=10000"
+            resp = requests.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if not data:
+                print(f"  {tbl}: empty (0 rows)")
+                continue
+            
+            df = pd.DataFrame(data)
+            
+            # Export to parquet
+            parquet_path = os.path.join(PARQUET_DIR, f"{tbl}.parquet")
+            df.to_parquet(parquet_path, index=False)
+            
+            # Upsert into DuckDB
+            conn.execute(f"DELETE FROM {tbl}")
+            conn.execute(f"INSERT INTO {tbl} SELECT * FROM read_parquet('{parquet_path}')")
+            
+            row_count = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+            print(f"  {tbl}: {row_count} rows synced, parquet at {parquet_path}")
+            
+            # Log sync
+            conn.execute("""
+                INSERT INTO sync_log (id, source, target, records_synced, status, synced_at)
+                VALUES (gen_random_uuid()::varchar, ?, 'duckdb', ?, 'success', current_timestamp)
+            """, [f"supabase/{tbl}", len(data)])
+            
+        except Exception as e:
+            print(f"  {tbl}: FAILED - {e}")
+            conn.execute("""
+                INSERT INTO sync_log (id, source, target, records_synced, status, error_message, synced_at)
+                VALUES (gen_random_uuid()::varchar, ?, 'duckdb', 0, 'error', ?, current_timestamp)
+            """, [f"supabase/{tbl}", str(e)])
+
+
+def run_query(conn: duckdb.DuckDBPyConnection, query: str):
+    """Execute a SQL query and print results."""
+    try:
+        result = conn.execute(query).fetchdf()
+        if result.empty:
+            print("(no results)")
+        else:
+            print(result.to_string(index=False))
+        return result
+    except Exception as e:
+        print(f"Query error: {e}")
+        return None
+
+
+def interactive_mode(conn: duckdb.DuckDBPyConnection):
+    """Interactive SQL shell."""
+    print("\nDuckDB Interactive Shell (type 'exit' to quit, 'tables' for schema)")
+    print("=" * 60)
+    while True:
+        try:
+            query = input("\nduckdb> ").strip()
+            if not query:
+                continue
+            if query.lower() in ("exit", "quit", "q"):
+                break
+            if query.lower() == "tables":
+                run_query(conn, "SELECT table_name, table_type FROM information_schema.tables WHERE table_schema='main' ORDER BY table_type, table_name")
+                continue
+            if query.lower() == "summary":
+                run_query(conn, "SELECT * FROM storage_summary")
+                continue
+            if query.lower() == "progress":
+                run_query(conn, "SELECT * FROM index_progress")
+                continue
+            run_query(conn, query)
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting.")
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(description="DuckDB local analytics setup")
+    parser.add_argument("--init", action="store_true", help="Initialize database and tables")
+    parser.add_argument("--sync", nargs="?", const="all", help="Sync from Supabase (optionally specify table)")
+    parser.add_argument("--query", "-q", type=str, help="Run a SQL query")
+    parser.add_argument("--db", type=str, default=DB_PATH, help="Path to DuckDB file")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Interactive SQL shell")
+    args = parser.parse_args()
+    
+    # Load .env if present
+    env_path = Path(__file__).parent / "vector-search" / ".env"
+    if not env_path.exists():
+        env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(env_path)
+        except ImportError:
+            # Manual .env parsing
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip())
+    
+    # Re-read env after loading .env
+    global SUPABASE_URL, SUPABASE_KEY
+    SUPABASE_URL = os.getenv("SUPABASE_URL", SUPABASE_URL)
+    SUPABASE_KEY = os.getenv("SUPABASE_API_KEY", SUPABASE_KEY)
+    
+    conn = init_db(args.db)
+    
+    if args.sync:
+        print(f"\nSyncing from Supabase ({args.sync})...")
+        sync_from_supabase(conn, args.sync)
+    
+    if args.query:
+        run_query(conn, args.query)
+    elif args.interactive or (not args.init and not args.sync):
+        interactive_mode(conn)
+    
+    conn.close()
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()

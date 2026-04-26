@@ -1,0 +1,35 @@
+{
+  "mcpServers": {},
+  "preferences": {
+    "launchPreviewPersistSession": true,
+    "localAgentModeTrustedFolders": [
+      "C:\\Users\\User\\Azure_GitHub",
+      "C:\\Users\\User\\Atlassian",
+      "C:\\Users\\User\\AI_Agent_Skills",
+      "C:\\Users\\User\\Cloudflare",
+      "C:\\Users\\User\\HuggingFace",
+      "C:\\Users\\User\\VSCodespace",
+      "C:\\Users\\User\\WSL_Docker",
+      "C:\\Users\\User\\PyCharmMiscProject",
+      "C:\\Users\\User\\.vscode",
+      "C:\\Users\\User\\vscode-remote-wsl",
+      "C:\\Users\\User\\Cloud-Drive",
+      "C:\\Users\\User\\OneDrive",
+      "C:\\Users\\User\\Documents\\Python Scripts",
+      "C:\\Users\\User\\.ollama",
+      "C:\\Users\\User\\Documents",
+      "C:\\Users\\User\\iCloudDrive"
+    ],
+    "allowAllBrowserActions": true,
+    "coworkScheduledTasksEnabled": true,
+    "ccdScheduledTasksEnabled": true,
+    "sidebarMode": "epitaxy",
+    "bypassPermissionsModeEnabled": true,
+    "dockBounceEnabled": true,
+    "coworkWebSearchEnabled": true,
+    "keepAwakeEnabled": true,
+    "coworkOnboardingResumeStep": null,
+    "chicagoEnabled": true,
+    "ccAutoArchiveOnPrClose": true
+  }
+}

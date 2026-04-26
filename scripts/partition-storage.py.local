@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""Storage Partitioning Tool.
+
+Scans Google Drive, OneDrive, and local paths to categorize files
+into storage tiers (HOT/WARM/COLD/FROZEN) and generates a migration plan.
+
+Usage:
+    python partition-storage.py --scan          # Scan all sources
+    python partition-storage.py --plan          # Generate migration plan
+    python partition-storage.py --execute       # Execute migration (dry-run by default)
+    python partition-storage.py --execute --confirm  # Actually move files
+"""
+
+import os
+import sys
+import argparse
+import json
+import hashlib
+from pathlib import Path
+from datetime import datetime, timedelta
+from collections import defaultdict
+
+# Tier definitions
+TIERS = {
+    "HOT": {
+        "description": "Active work - SSD, Supabase, D1",
+        "max_age_days": 30,
+        "locations": ["SSD", "Supabase", "Cloudflare D1"],
+        "extensions": {".py", ".js", ".ts", ".json", ".md", ".env", ".yaml", ".yml", ".toml"},
+    },
+    "WARM": {
+        "description": "Recent reference - GDrive, OneDrive, DuckDB",
+        "max_age_days": 180,
+        "locations": ["Google Drive", "OneDrive", "DuckDB Parquet"],
+        "extensions": {".pdf", ".docx", ".xlsx", ".csv", ".html", ".pptx"},
+    },
+    "COLD": {
+        "description": "Archive - R2, HDD, NordCloud",
+        "max_age_days": 365,
+        "locations": ["Cloudflare R2", "HDD H:", "NordCloud 3TB"],
+        "extensions": {".zip", ".tar", ".gz", ".bak", ".old", ".log"},
+    },
+    "FROZEN": {
+        "description": "Historical - iDrive 10TB",
+        "max_age_days": None,
+        "locations": ["iDrive"],
+        "extensions": {".iso", ".vmdk", ".vhd", ".img"},
+    },
+}
+
+# Junk patterns to auto-delete
+JUNK_PATTERNS = [
+    "node_modules", "__pycache__", ".git/objects", ".next/cache",
+    "Thumbs.db", ".DS_Store", "desktop.ini", "*.tmp",
+    ".cache", ".npm", ".nuget", "bin/Debug", "obj/Debug",
+]
+
+def classify_file(filepath: str, file_size: int, last_modified: datetime) -> str:
+    """Classify a file into a storage tier."""
+    ext = Path(filepath).suffix.lower()
+    name = Path(filepath).name.lower()
+    age_days = (datetime.now() - last_modified).days
+    
+    # Check for junk first
+    for pattern in JUNK_PATTERNS:
+        if pattern.startswith("*"):
+            if name.endswith(pattern[1:]):
+                return "DELETE"
+        elif pattern in filepath:
+            return "DELETE"
+    
+    # Check by age and extension
+    if age_days <= 30 or ext in TIERS["HOT"]["extensions"]:
+        return "HOT"
+    elif age_days <= 180 or ext in TIERS["WARM"]["extensions"]:
+        return "WARM"
+    elif age_days <= 365 or ext in TIERS["COLD"]["extensions"]:
+        return "COLD"
+    else:
+        return "FROZEN"
+
+
+def scan_directory(root_path: str, source_name: str = "local") -> list:
+    """Scan a directory and classify all files."""
+    results = []
+    root = Path(root_path)
+    
+    if not root.exists():
+        print(f"  WARNING: {root_path} does not exist, skipping")
+        return results
+    
+    print(f"  Scanning {root_path}...")
+    file_count = 0
+    
+    for item in root.rglob("*"):
+        if item.is_file():
+            try:
+                stat = item.stat()
+                tier = classify_file(str(item), stat.st_size, datetime.fromtimestamp(stat.st_mtime))
+                results.append({
+                    "path": str(item),
+                    "name": item.name,
+                    "ext": item.suffix.lower(),
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "tier": tier,
+                    "source": source_name,
+                })
+                file_count += 1
+                if file_count % 1000 == 0:
+                    print(f"    ...{file_count} files scanned")
+            except (PermissionError, OSError):
+                continue
+    
+    print(f"  Completed: {file_count} files in {root_path}")
+    return results
+
+
+def generate_plan(results: list) -> dict:
+    """Generate a migration plan from scan results."""
+    plan = defaultdict(lambda: {"count": 0, "bytes": 0, "files": []})
+    
+    for item in results:
+        tier = item["tier"]
+        plan[tier]["count"] += 1
+        plan[tier]["bytes"] += item["size"]
+        if len(plan[tier]["files"]) < 20:  # Keep top 20 examples
+            plan[tier]["files"].append({"path": item["path"], "size": item["size"]})
+    
+    summary = {}
+    for tier in ["HOT", "WARM", "COLD", "FROZEN", "DELETE"]:
+        data = plan[tier]
+        summary[tier] = {
+            "count": data["count"],
+            "size_mb": round(data["bytes"] / 1048576, 2),
+            "size_gb": round(data["bytes"] / 1073741824, 2),
+            "description": TIERS.get(tier, {}).get("description", "Files to delete"),
+            "sample_files": data["files"][:5],
+        }
+    
+    return summary
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Storage Partitioning Tool")
+    parser.add_argument("--scan", action="store_true", help="Scan all configured paths")
+    parser.add_argument("--plan", action="store_true", help="Generate migration plan from last scan")
+    parser.add_argument("--paths", nargs="+", help="Override scan paths")
+    parser.add_argument("--output", default="partition-plan.json", help="Output file for plan")
+    args = parser.parse_args()
+    
+    # Default scan paths (Windows)
+    default_paths = {
+        "OneDrive": os.path.expanduser("~/OneDrive/Documents"),
+        "AI_Agent_Skills": os.path.expanduser("~/AI_Agent_Skills"),
+        "VSCodespace": os.path.expanduser("~/VSCodespace"),
+        "Downloads": os.path.expanduser("~/Downloads"),
+    }
+    
+    scan_paths = {}
+    if args.paths:
+        for p in args.paths:
+            scan_paths[Path(p).name] = p
+    else:
+        scan_paths = default_paths
+    
+    if args.scan or not args.plan:
+        print("=== Storage Partition Scan ===")
+        print(f"Timestamp: {datetime.now().isoformat()}")
+        print()
+        
+        all_results = []
+        for name, path in scan_paths.items():
+            results = scan_directory(path, name)
+            all_results.extend(results)
+        
+        # Save raw scan
+        scan_file = args.output.replace(".json", "-scan.json")
+        with open(scan_file, "w") as f:
+            json.dump(all_results, f, indent=2, default=str)
+        print(f"\nRaw scan saved: {scan_file} ({len(all_results)} files)")
+        
+        # Generate and save plan
+        plan = generate_plan(all_results)
+        with open(args.output, "w") as f:
+            json.dump(plan, f, indent=2)
+        
+        print(f"\n=== Partition Plan ===")
+        total_files = 0
+        total_gb = 0
+        for tier, data in plan.items():
+            emoji = {"HOT": "🔥", "WARM": "☀️", "COLD": "❄️", "FROZEN": "🧊", "DELETE": "🗑️"}.get(tier, "")
+            print(f"  {emoji} {tier}: {data['count']:,} files, {data['size_gb']:.2f} GB - {data['description']}")
+            total_files += data['count']
+            total_gb += data['size_gb']
+        
+        print(f"\n  TOTAL: {total_files:,} files, {total_gb:.2f} GB")
+        
+        deletable = plan.get("DELETE", {})
+        if deletable.get("size_gb", 0) > 0:
+            print(f"\n  RECLAIMABLE: {deletable['size_gb']:.2f} GB by deleting {deletable['count']:,} junk files")
+        
+        print(f"\nPlan saved: {args.output}")
+    
+    elif args.plan:
+        if not os.path.exists(args.output):
+            print(f"No plan found at {args.output}. Run --scan first.")
+            return
+        with open(args.output) as f:
+            plan = json.load(f)
+        for tier, data in plan.items():
+            print(f"{tier}: {data['count']:,} files, {data['size_gb']:.2f} GB")
+
+
+if __name__ == "__main__":
+    main()

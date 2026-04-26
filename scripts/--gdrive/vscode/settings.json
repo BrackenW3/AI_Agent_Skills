@@ -1,0 +1,172 @@
+// ════════════════════════════════════════════════════════════════════════════
+// VSCODE USER SETTINGS — Solo Developer (Windows / WSL / Remote)
+// Last optimized: 2026-04-22
+// ════════════════════════════════════════════════════════════════════════════
+
+{
+  // ───────────────────────────────────────────────────────────────────────────
+  // PYTHON
+  // ───────────────────────────────────────────────────────────────────────────
+  "python.venvPath": "${workspaceFolder}",
+  "python.envFile": "${workspaceFolder}/.env",
+  "python.testing.pytestEnabled": true,
+  // python.linting.enabled is deprecated — linting is now per-extension (Ruff handles it)
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // FORMATTING
+  // ───────────────────────────────────────────────────────────────────────────
+  "prettier.requireConfig": true,
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": false,
+  "editor.formatOnType": false,
+
+  "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[yaml]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ESLINT / JS TOOLING
+  // ───────────────────────────────────────────────────────────────────────────
+  "eslint.workingDirectories": [{ "mode": "auto" }],
+  "eslint.validate": ["javascript", "typescript", "javascriptreact", "typescriptreact"],
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // SEARCH / FILE HYGIENE
+  // ───────────────────────────────────────────────────────────────────────────
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/.next": true,
+    "**/coverage": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.git": true,
+    "**/Anaconda3": true
+  },
+
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "**/*.pyc": true
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // FILE WATCHER — exclude heavy dirs + cloud sync to reduce CPU/RAM
+  // ───────────────────────────────────────────────────────────────────────────
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/*.pyc": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/.next/**": true,
+    "**/coverage/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "C:/Users/User/iCloudDrive/**": true,
+    "C:/Users/User/OneDrive/**": true,
+    "C:/Users/User/Anaconda3/**": true,
+    "C:/Users/User/AppData/Local/npm-cache/**": true
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // GIT
+  // ───────────────────────────────────────────────────────────────────────────
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "git.autoRepositoryDetection": "openEditors",
+  "git-graph.repository.fetchAndPrune": true,
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // GITLENS — Solo developer mode (all team/paid features disabled)
+  // ───────────────────────────────────────────────────────────────────────────
+  "gitlens.plusFeatures.enabled": false,
+  "gitlens.views.drafts.enabled": false,
+  "gitlens.views.worktrees.enabled": false,
+  "gitlens.launchpad.indicator.enabled": false,
+  "gitlens.views.contributors.enabled": false,
+  "gitlens.views.fileHistory.enabled": false,
+  "gitlens.telemetry.enabled": false,
+  "gitlens.showWelcomeOnInstall": false,
+  "gitlens.showWhatsNewAfterUpgrades": false,
+  "gitlens.codeLens.enabled": false,
+  // Keep current-line blame and status bar — these are the useful solo features
+  "gitlens.currentLine.enabled": true,
+  "gitlens.statusBar.enabled": true,
+  "gitlens.hovers.enabled": true,
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // GITHUB COPILOT
+  // ───────────────────────────────────────────────────────────────────────────
+  "chat.unifiedAgentsBar.enabled": true,
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": false,
+    "markdown": false
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // GEMINI CODE ASSIST
+  // ───────────────────────────────────────────────────────────────────────────
+  "geminicodeassist.project": "apt-racer-nkhfj",
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // TERMINAL (CROSS-OS + WSL)
+  // ───────────────────────────────────────────────────────────────────────────
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  "terminal.integrated.fontFamily": "JetBrains Mono, Menlo, Consolas, monospace",
+  "terminal.integrated.gpuAcceleration": "on",
+  "terminal.integrated.persistentSessionReviveProcess": "never",
+  "terminal.integrated.enablePersistentSessions": false,
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // EDITOR UX
+  // ───────────────────────────────────────────────────────────────────────────
+  "editor.fontSize": 12,
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+  "editor.minimap.enabled": false,
+  "editor.renderWhitespace": "selection",
+  "editor.wordWrap": "on",
+  "editor.linkedEditing": true,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": "active",
+  "editor.suggest.preview": true,
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // PERFORMANCE
+  // ───────────────────────────────────────────────────────────────────────────
+  "extensions.autoUpdate": "onlyEnabledExtensions",
+  "telemetry.telemetryLevel": "error",
+  "workbench.enableExperiments": false,
+  "update.showReleaseNotes": false,
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // WORKBENCH + LAYOUT
+  // ───────────────────────────────────────────────────────────────────────────
+  "workbench.colorTheme": "Ayu Light Bordered",
+  "workbench.iconTheme": "material-icon-theme",
+  "window.customTitleBarVisibility": "windowed",
+  // Right panel visible — drag GitHub Pull Requests icon from left activity bar
+  // to the right (secondary) sidebar for permanent GitHub-first layout
+  "workbench.secondarySideBar.defaultVisibility": "visible",
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // LIVE SERVER
+  // ───────────────────────────────────────────────────────────────────────────
+  "liveServer.settings.root": "/"
+}

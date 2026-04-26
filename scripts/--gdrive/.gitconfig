@@ -1,0 +1,23 @@
+[user]
+	name = Will Bracken
+	email = william.i.bracken@outlook.com
+[core]
+	editor = 'C:/Program Files/Notepad++/notepad++.exe' -multiInst -notabbar -nosession -noPlugin
+	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
+[init]
+	defaultBranch = main
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[safe]
+	directory = //wsl.localhost/Ubuntu/home/wbracken/test-cline-project
+	directory = //wsl.localhost/Ubuntu/home/wbracken/test-cline-project/VSCode_Projects
+[credential "https://huggingface.co"]
+	provider = generic
+[credential "https://github.com"]
+	provider = generic
+
+[credential]
+	helper =
