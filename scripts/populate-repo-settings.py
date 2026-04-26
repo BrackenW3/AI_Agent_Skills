@@ -109,11 +109,11 @@ def qualify_repo(owner: str, repo: str) -> str:
     return repo if "/" in repo else f"{owner}/{repo}"
 
 
-def gh_set(setting_type: str, qualified_repo: str, name: str, value: str, dry_run: bool) -> None:
-    command = ["gh", setting_type, "set", name, "--repo", qualified_repo, "--body", value]
+def gh_set(setting_type: str, qualified_repo: str, name: str, setting_value: str, dry_run: bool) -> None:
     if dry_run:
         print(f"DRY-RUN {setting_type} {qualified_repo} {name}")
         return
+    command = ["gh", setting_type, "set", name, "--repo", qualified_repo, "--body", setting_value]
     subprocess.run(command, check=True, text=True, capture_output=True)
 
 
@@ -157,32 +157,32 @@ def main() -> int:
     overall_missing: dict[str, list[str]] = {}
     for repo in deduped_repos:
         qualified_repo = qualify_repo(owner, repo)
-        updated_secrets = 0
-        updated_variables = 0
-        missing: list[str] = []
+        secret_updates = 0
+        variable_updates = 0
+        missing_names: list[str] = []
         print(f"\n==> {qualified_repo}")
 
         for name in secret_names:
-            value = env_map.get(name, "")
-            if not value:
-                missing.append(name)
+            setting_value = env_map.get(name, "")
+            if not setting_value:
+                missing_names.append(name)
                 continue
-            gh_set("secret", qualified_repo, name, value, args.dry_run)
-            updated_secrets += 1
+            gh_set("secret", qualified_repo, name, setting_value, args.dry_run)
+            secret_updates += 1
 
         for name in variable_names:
-            value = env_map.get(name, "")
-            if not value:
-                missing.append(name)
+            setting_value = env_map.get(name, "")
+            if not setting_value:
+                missing_names.append(name)
                 continue
-            gh_set("variable", qualified_repo, name, value, args.dry_run)
-            updated_variables += 1
+            gh_set("variable", qualified_repo, name, setting_value, args.dry_run)
+            variable_updates += 1
 
-        overall_missing[qualified_repo] = missing
-        print(f"Updated secrets: {updated_secrets}")
-        print(f"Updated variables: {updated_variables}")
-        if missing:
-            print(f"Skipped missing values: {', '.join(sorted(missing))}")
+        overall_missing[qualified_repo] = missing_names
+        print(f"Updated secrets: {secret_updates}")
+        print(f"Updated variables: {variable_updates}")
+        if missing_names:
+            print(f"Skipped missing settings: {len(missing_names)}")
 
     missing_total = sum(len(values) for values in overall_missing.values())
     print("\nDone.")
