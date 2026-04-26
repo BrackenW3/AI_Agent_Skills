@@ -18,7 +18,13 @@ cd AI_Agent_Skills
 
 ## 2. Configure Environment Variables
 
-Copy and fill in the template files for each service you use:
+Start from the canonical template:
+
+```bash
+cp env/template.env ~/VSCodespace/.env
+```
+
+Then copy and fill in the service-specific templates you need:
 
 ```bash
 # VS Code / AI Extensions
@@ -34,7 +40,7 @@ cp config/atlassian/.env.template config/atlassian/.env
 cp config/cloudflare/.env.template config/cloudflare/.env
 ```
 
-Open each `.env` file and fill in your credentials. See the sections below for where to obtain each credential.
+Open each `.env` file and fill in your credentials. Keep `~/VSCodespace/.env` as the shared source of truth for cross-repo automation and MCP sync. See the sections below for where to obtain each credential.
 
 ## 3. Obtain API Keys
 
@@ -125,6 +131,20 @@ This repository is designed to be cloned on each machine you use. To sync:
    ```
    Then fill in your credentials in each `.env` file.
 3. Use a **secrets manager** (e.g. 1Password, Bitwarden, AWS Secrets Manager) to store and retrieve actual credential values — never store them in this repo
+
+## 7. Populate GitHub Repository Variables & Secrets
+
+To mirror the shared settings into one or more repos:
+
+```bash
+# Preview everything for the default repo list
+python3 scripts/populate-repo-settings.py --all-default-repos --dry-run
+
+# Populate a single repo when it is created
+python3 scripts/populate-repo-settings.py --repo NewRepoName
+```
+
+The `Populate Repository Settings` GitHub Actions workflow provides the same flow in GitHub for manual runs or repo-creation automation via `repository_dispatch`.
 
 ## Security Checklist
 

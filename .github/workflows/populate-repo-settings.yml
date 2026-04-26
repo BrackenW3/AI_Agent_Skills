@@ -1,0 +1,144 @@
+name: Populate Repository Settings
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: GitHub owner/org to target
+        required: false
+        default: BrackenW3
+      repositories:
+        description: Comma-separated repo names or owner/repo values
+        required: false
+        default: ""
+      use_default_repositories:
+        description: Populate the default repo list from env/repository-bootstrap.json
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: Print planned updates without changing GitHub settings
+        required: false
+        type: boolean
+        default: true
+  repository_dispatch:
+    types:
+      - populate-repo-settings
+
+jobs:
+  populate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.REPOSITORY_ADMIN_TOKEN || secrets.GITHUB_MCP_PAT || github.token }}
+      AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+      ATLASSIAN_BASE_URL: ${{ vars.ATLASSIAN_BASE_URL }}
+      ATLASSIAN_EMAIL: ${{ vars.ATLASSIAN_EMAIL }}
+      ATLASSIAN_OAUTH_CLIENT_ID: ${{ vars.ATLASSIAN_OAUTH_CLIENT_ID }}
+      ATLASSIAN_OAUTH_CLIENT_SECRET: ${{ secrets.ATLASSIAN_OAUTH_CLIENT_SECRET }}
+      ATLASSIAN_SHARED_SECRET: ${{ secrets.ATLASSIAN_SHARED_SECRET }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${{ vars.AZURE_OPENAI_DEPLOYMENT_NAME }}
+      AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+      AZURE_POSTGRES_CONNECTION_STRING: ${{ secrets.AZURE_POSTGRES_CONNECTION_STRING }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      BITBUCKET_APP_PASSWORD: ${{ secrets.BITBUCKET_APP_PASSWORD }}
+      BITBUCKET_USERNAME: ${{ vars.BITBUCKET_USERNAME }}
+      BITBUCKET_WORKSPACE: ${{ vars.BITBUCKET_WORKSPACE }}
+      BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      CLOUDFLARE_ACCESS_AUD: ${{ vars.CLOUDFLARE_ACCESS_AUD }}
+      CLOUDFLARE_ACCESS_TEAM_NAME: ${{ vars.CLOUDFLARE_ACCESS_TEAM_NAME }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_AI_DEFAULT_MODEL: ${{ vars.CLOUDFLARE_AI_DEFAULT_MODEL }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID }}
+      CLOUDFLARE_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME }}
+      CLOUDFLARE_GLOBAL_API_KEY: ${{ secrets.CLOUDFLARE_GLOBAL_API_KEY }}
+      CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+      CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ vars.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+      CLOUDFLARE_R2_BUCKET_NAME: ${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}
+      CLOUDFLARE_R2_ENDPOINT: ${{ vars.CLOUDFLARE_R2_ENDPOINT }}
+      CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+      CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+      CLOUDFLARE_ZONE_NAME: ${{ vars.CLOUDFLARE_ZONE_NAME }}
+      COCKROACHDB_CLUSTER_ID: ${{ vars.COCKROACHDB_CLUSTER_ID }}
+      CONFLUENCE_BASE_URL: ${{ vars.CONFLUENCE_BASE_URL }}
+      CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GITHUB_COPILOT_API_KEY: ${{ secrets.GITHUB_COPILOT_API_KEY }}
+      GITHUB_MCP_PAT: ${{ secrets.GITHUB_MCP_PAT }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+      GOOGLE_CLOUD_REGION: ${{ vars.GOOGLE_CLOUD_REGION }}
+      GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ vars.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+      HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+      JIRA_BASE_URL: ${{ vars.JIRA_BASE_URL }}
+      JIRA_DEFAULT_PROJECT: ${{ vars.JIRA_DEFAULT_PROJECT }}
+      MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
+      MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+      MICROSOFT_TENANT_ID: ${{ vars.MICROSOFT_TENANT_ID }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
+      N8N_SMTP_PASS: ${{ secrets.N8N_SMTP_PASS }}
+      N8N_USER_MANAGEMENT_JWT_SECRET: ${{ secrets.N8N_USER_MANAGEMENT_JWT_SECRET }}
+      NEON_API_TOKEN: ${{ secrets.NEON_API_TOKEN }}
+      NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
+      STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
+      STATUSPAGE_PAGE_ID: ${{ vars.STATUSPAGE_PAGE_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_API_KEY: ${{ secrets.SUPABASE_API_KEY }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Populate repository settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER="${OWNER_INPUT:-${PAYLOAD_OWNER:-BrackenW3}}"
+          REPOSITORIES="${REPOSITORIES_INPUT:-${PAYLOAD_REPOSITORIES:-}}"
+          USE_DEFAULT="${USE_DEFAULT_INPUT:-${PAYLOAD_USE_DEFAULT:-false}}"
+          DRY_RUN="${DRY_RUN_INPUT:-${PAYLOAD_DRY_RUN:-true}}"
+
+          args=(--owner "$OWNER")
+          if [[ -n "$REPOSITORIES" ]]; then
+            args+=(--repo "$REPOSITORIES")
+          fi
+          if [[ "$USE_DEFAULT" == "true" ]]; then
+            args+=(--all-default-repos)
+          fi
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+
+          python3 scripts/populate-repo-settings.py "${args[@]}"
+        env:
+          OWNER_INPUT: ${{ inputs.owner }}
+          REPOSITORIES_INPUT: ${{ inputs.repositories }}
+          USE_DEFAULT_INPUT: ${{ inputs.use_default_repositories }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          PAYLOAD_OWNER: ${{ github.event.client_payload.owner }}
+          PAYLOAD_REPOSITORIES: ${{ github.event.client_payload.repositories }}
+          PAYLOAD_USE_DEFAULT: ${{ github.event.client_payload.use_default_repositories }}
+          PAYLOAD_DRY_RUN: ${{ github.event.client_payload.dry_run }}
