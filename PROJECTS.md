@@ -225,6 +225,7 @@
 *Agents: append a line here at end of every session*
 
 - 2026-04-23: i9 emergency triage — fixed LocalAppData, killed iCloudDrive/GoogleDriveFS leak, identified auto-configure-mcp.ps1 as source of 700+ MCP entries, confirmed 13 claude processes are normal Desktop+CLI, created CLAUDE.md + PROJECTS.md (Sonnet 4.6)
+- 2026-04-26: added canonical env inventory plus repo settings bootstrap automation/workflow for cross-repo secret and variable sync (Copilot)
 
 ---
 
@@ -416,4 +417,3 @@
 - Integrate with existing ai-router tier system in Cloudflare
 - Connect to n8n workflows
 **Next step:** Check https://openrouter.ai/settings — find the completed bots, then integrate
-

@@ -13,6 +13,7 @@ Secret-free MCP templates and sync helpers — the single source of truth for MC
 
 ```bash
 git clone https://github.com/WillBracken/AI_Agent_Skills.git ~/AI_Agent_Skills
+cp ~/AI_Agent_Skills/env/template.env ~/VSCodespace/.env
 
 # Windows (PowerShell)
 ~/AI_Agent_Skills/scripts/sync.ps1
@@ -61,6 +62,7 @@ AI_Agent_Skills/
 │   └── shared.mcp.json          # Canonical MCP server registry (9 servers)
 ├── env/
 │   └── template.env             # Required env variable names and aliases
+│   └── repository-bootstrap.json # Repo secret/variable inventory + default repo list
 ├── agents/
 │   ├── claude/
 │   │   ├── global-mcps.template.json    # Claude ~/.claude.json mcpServers block
@@ -86,15 +88,31 @@ AI_Agent_Skills/
 |------|-------------|
 | `mcp/shared.mcp.json` | Canonical registry — edit here first |
 | `env/template.env` | Lists every required env variable |
+| `env/repository-bootstrap.json` | Lists GitHub repo variables/secrets mirrored across repos |
 | `agents/` | Per-agent templates (Claude, Copilot, Gemini, JetBrains) |
 | `scripts/sync.ps1` | Windows sync — writes live configs from templates |
 | `scripts/sync.sh` | Linux/macOS/WSL2 sync — same logic in Bash |
+| `scripts/populate-repo-settings.py` | Pushes shared variables/secrets into one or more GitHub repos |
 
 ## Secrets & Environment Variables
 
 All secret values are stored in `~/VSCodespace/.env` (gitignored). The templates reference them as `${VAR_NAME}` and are safe to commit. See `env/template.env` for the full list of required variables.
 
 **Never commit `.env` files or secret literals to this repository.**
+
+## Repository Bootstrap
+
+Use the canonical inventory in `env/repository-bootstrap.json` to mirror shared GitHub Actions variables/secrets into every repo:
+
+```bash
+# Preview updates for all known repos
+python3 scripts/populate-repo-settings.py --all-default-repos --dry-run
+
+# Populate a single new repo
+python3 scripts/populate-repo-settings.py --repo NewRepoName
+```
+
+The repository also includes a `Populate Repository Settings` workflow for manual runs or `repository_dispatch` automation when a new repo is created.
 
 ## Supported Agents
 
