@@ -1,0 +1,57 @@
+name: Azure Cloud Indexer Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source to index (gdrive, onedrive, all)'
+        required: true
+        default: 'all'
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2am UTC
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BrackenW3/AI_Agent_Skills
+          token: ${{ secrets.GH_TOKEN }}
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+        continue-on-error: true
+
+      - name: Run indexer directly (no Azure needed)
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: https://willbracken-aoai-ihe42a.openai.azure.com/
+          AZURE_OPENAI_API_VERSION: 2025-01-01-preview
+          SUPABASE_URL: https://smttdhtpwkowcyatoztb.supabase.co
+          SUPABASE_API_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          pip install httpx supabase python-dotenv google-auth google-auth-httplib2 google-api-python-client
+          
+          cd scripts/vector-search
+          python3 cloud_indexer.py --source ${{ github.event.inputs.source || 'all' }}
+          
+      - name: Report indexing results
+        if: always()
+        env:
+          SUPABASE_URL: https://smttdhtpwkowcyatoztb.supabase.co
+          SUPABASE_API_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          python3 -c "
+          import httpx, os, json
+          url = os.environ['SUPABASE_URL']
+          key = os.environ['SUPABASE_API_KEY']
+          r = httpx.get(f'{url}/rest/v1/documents?select=file_source,count', 
+                        headers={'apikey': key, 'Authorization': f'Bearer {key}'})
+          print('Index results:', r.text[:500])
+          "
