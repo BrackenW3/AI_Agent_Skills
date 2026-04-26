@@ -32,6 +32,7 @@ yarn-error.log*
 .env.local
 .env*.local
 *.env
+!env/template.env
 
 # Specific config env files (keep .env.template files, ignore filled-in .env files)
 config/vscode/.env

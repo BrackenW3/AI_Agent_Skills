@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -147,7 +148,7 @@ def main() -> int:
     else:
         print("No local .env file found; using current process environment only.")
 
-    if not args.dry_run and not shutil_which("gh"):
+    if not args.dry_run and not shutil.which("gh"):
         raise SystemExit("GitHub CLI (gh) is required.")
 
     secret_names = manifest.get("secrets", [])
@@ -188,15 +189,5 @@ def main() -> int:
     print(f"Repositories processed: {len(deduped_repos)}")
     print(f"Missing values skipped: {missing_total}")
     return 0
-
-
-def shutil_which(binary: str) -> str | None:
-    for base in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = Path(base) / binary
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
-    return None
-
-
 if __name__ == "__main__":
     sys.exit(main())
