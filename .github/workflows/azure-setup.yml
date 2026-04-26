@@ -1,0 +1,79 @@
+name: Azure Infrastructure Work
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action'
+        required: true
+        default: 'status'
+        type: choice
+        options: [status, setup-indexer, deploy-neo4j, setup-cockroach]
+
+jobs:
+  azure-work:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Status
+        if: inputs.action == 'status'
+        run: |
+          echo "=== VMs ==="
+          az vm list --show-details --query "[].{name:name,state:powerState,ip:publicIps,rg:resourceGroup}" -o table || echo none
+          echo "=== Container Apps ==="
+          az containerapp list --query "[].{name:name,url:properties.configuration.ingress.fqdn}" -o table 2>/dev/null || echo none
+          echo "=== Resource Groups ==="
+          az group list --query "[].{name:name,location:location}" -o table
+          echo "=== Postgres ==="
+          az postgres flexible-server list --query "[].{name:name,state:state,fqdn:fullyQualifiedDomainName}" -o table 2>/dev/null || echo none
+
+      - name: Setup Cloud Indexer
+        if: inputs.action == 'setup-indexer'
+        env:
+          AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          # Try VM first
+          VM_IP=$(az vm list --show-details --query "[0].publicIps" -o tsv 2>/dev/null || echo "")
+          if [ -n "$VM_IP" ] && [ "$VM_IP" != "None" ]; then
+            echo "VM found at $VM_IP - setting up indexer"
+            scp -o StrictHostKeyChecking=no scripts/vector-search/indexer.py willbrackenadmin@$VM_IP:~/
+            scp -o StrictHostKeyChecking=no scripts/vector-search/requirements.txt willbrackenadmin@$VM_IP:~/
+            ssh -o StrictHostKeyChecking=no willbrackenadmin@$VM_IP "pip3 install httpx supabase python-dotenv tiktoken --break-system-packages && echo DEPS_OK"
+            cat > /tmp/vm.env << ENVEOF
+AZURE_OPENAI_ENDPOINT=https://willbracken-aoai-ihe42a.openai.azure.com/
+AZURE_OPENAI_KEY=$AZURE_OPENAI_KEY
+AZURE_OPENAI_API_VERSION=2025-01-01-preview
+EMBEDDING_MODEL=text-embedding-3-small
+SUPABASE_URL=https://smttdhtpwkowcyatoztb.supabase.co
+SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+CHUNK_SIZE_BYTES=2048
+MAX_REQUESTS_PER_MINUTE=200
+LOG_LEVEL=INFO
+ENVEOF
+            scp -o StrictHostKeyChecking=no /tmp/vm.env willbrackenadmin@$VM_IP:~/.env
+            ssh -o StrictHostKeyChecking=no willbrackenadmin@$VM_IP "nohup python3 indexer.py --path /home/willbrackenadmin > /tmp/indexer.log 2>&1 &"
+            echo "Indexer started on VM"
+          else
+            echo "No VM found - creating Azure Container Instance for indexing"
+            az container create --resource-group willbracken-free-rg --name cloud-indexer               --image python:3.12-slim --cpu 2 --memory 4 --restart-policy Never               --secure-environment-variables AZURE_OPENAI_KEY=$AZURE_OPENAI_KEY SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET               --environment-variables AZURE_OPENAI_ENDPOINT=https://willbracken-aoai-ihe42a.openai.azure.com/ SUPABASE_URL=https://smttdhtpwkowcyatoztb.supabase.co               --command-line "/bin/bash -c 'pip install httpx supabase python-dotenv tiktoken google-auth google-auth-httplib2 google-api-python-client && python3 /mnt/indexer/cloud_indexer_vm.py --source onedrive'"               && echo "Container instance running"
+          fi
+
+      - name: Deploy Neo4j
+        if: inputs.action == 'deploy-neo4j'
+        run: |
+          echo "Checking Neo4j deployment..."
+          az containerapp show --name willbracken-neo4j --resource-group willbracken-free-rg 2>/dev/null || echo "Neo4j not deployed"
+          # Deploy as container app
+          az containerapp create --name willbracken-neo4j             --resource-group willbracken-free-rg             --image neo4j:5-community             --cpu 0.5 --memory 1.0             --min-replicas 0 --max-replicas 1             --ingress external --target-port 7474             --env-vars NEO4J_AUTH=neo4j/${{ secrets.NEO4J_PASSWORD }} NEO4J_PLUGINS='["apoc","graph-data-science"]'             2>&1 || echo "Neo4j deploy attempted"
+
+      - name: Setup CockroachDB and Neon
+        if: inputs.action == 'setup-cockroach'
+        run: |
+          echo "CockroachDB cluster ID and Neon project setup"
+          echo "Both are cloud-managed - just need schema applied"
+          echo "Run schema files from CloudDatabases repo"
