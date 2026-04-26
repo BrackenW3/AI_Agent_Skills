@@ -31,6 +31,7 @@ jobs:
     permissions:
       contents: read
     env:
+      GH_ADMIN_TOKEN: ${{ secrets.REPOSITORY_ADMIN_TOKEN || secrets.GITHUB_MCP_PAT }}
       GH_TOKEN: ${{ secrets.REPOSITORY_ADMIN_TOKEN || secrets.GITHUB_MCP_PAT || github.token }}
       AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -75,7 +76,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GITHUB_COPILOT_API_KEY: ${{ secrets.GITHUB_COPILOT_API_KEY }}
       GITHUB_MCP_PAT: ${{ secrets.GITHUB_MCP_PAT }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BOOTSTRAP_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
       GOOGLE_CLOUD_REGION: ${{ vars.GOOGLE_CLOUD_REGION }}
@@ -111,6 +112,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+
+      - name: Validate non-dry-run auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          DRY_RUN="${DRY_RUN_INPUT:-${PAYLOAD_DRY_RUN:-true}}"
+          if [[ "$DRY_RUN" != "true" && -z "${GH_ADMIN_TOKEN:-}" ]]; then
+            echo "::error::Set REPOSITORY_ADMIN_TOKEN or GITHUB_MCP_PAT with repo-admin access before running a non-dry-run sync."
+            exit 1
+          fi
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          PAYLOAD_DRY_RUN: ${{ github.event.client_payload.dry_run }}
 
       - name: Populate repository settings
         shell: bash

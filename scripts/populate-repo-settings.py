@@ -59,7 +59,9 @@ def parse_env_file(path: Path) -> dict[str, str]:
         key = key.strip()
         if not ENV_KEY_PATTERN.match(key):
             continue
-        value = value.strip().strip('"').strip("'")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
         data[key] = value
     return data
 
@@ -88,6 +90,8 @@ def load_env_map(env_file: str | None) -> tuple[dict[str, str], Path | None]:
 
     if env_map.get("GITHUB_MCP_PAT") and not env_map.get("GITHUB_TOKEN"):
         env_map["GITHUB_TOKEN"] = env_map["GITHUB_MCP_PAT"]
+    if env_map.get("BOOTSTRAP_GITHUB_TOKEN") and not env_map.get("GITHUB_TOKEN"):
+        env_map["GITHUB_TOKEN"] = env_map["BOOTSTRAP_GITHUB_TOKEN"]
 
     return env_map, loaded_file
 
@@ -111,6 +115,10 @@ def qualify_repo(owner: str, repo: str) -> str:
 
 def gh_set(setting_type: str, qualified_repo: str, name: str, setting_value: str, dry_run: bool) -> None:
     if dry_run:
+        return
+    if setting_type == "secret":
+        command = ["gh", "secret", "set", name, "--repo", qualified_repo]
+        subprocess.run(command, check=True, text=True, input=setting_value, capture_output=True)
         return
     command = ["gh", setting_type, "set", name, "--repo", qualified_repo, "--body", setting_value]
     subprocess.run(command, check=True, text=True, capture_output=True)
