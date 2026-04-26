@@ -349,3 +349,71 @@
 **Note:** `AI_Agent_Skills/scripts/cleanup-gdrive.py` and `partition-gdrive.py` already exist — review these before writing new ones. Also `gdrive-duckdb-bridge.py` exists.
 **Next step:** Locate and review existing scripts, run cleanup in dry-run mode first
 
+
+---
+
+### 17. Azure Login + Entra Auth Fix ✅ COMPLETE
+**Repo:** `Cloudflare/apps/entra-auth/`
+**Priority:** CRITICAL — blocking Azure credit usage
+**Status:** ✅ DONE — deployed to entra-auth.pages.dev, Graph API working, Will Bracken authenticated
+**Root cause suspects:**
+- mTLS still active on Cloudflare (was set up, may still be enforcing client certs)
+- Azure SSO pushed accidentally, not fully configured
+- Zero Trust login was customized — may be conflicting
+**Goal:** Simple SSO login so Will can access willbracken.com from his own devices without GitHub app flow
+**ChatGPT started this** in `Cloudflare/apps/entra-auth` — review before rebuilding
+**NordVPN note:** Must use cloudflared tunnels to avoid NordVPN conflicts (Docker bypasses this automatically)
+**Definition of done:**
+- [ ] Will can log into willbracken.com with Azure/Microsoft account, no cert picker
+- [ ] mTLS reviewed — disable or scope correctly (members only, not blocking Will)
+- [ ] Zero Trust config reviewed and cleaned up
+- [ ] Azure SSO working for private sections of site
+- [ ] PIN or GitHub login for general visitors (separate from Azure SSO)
+- [ ] No conflict with NordVPN (cloudflared tunnel in place)
+**Next step:** Review entra-auth app code, check Cloudflare Zero Trust dashboard, disable/fix mTLS
+
+---
+
+### 18. Cloudflare Security + Functionality Audit
+**Repo:** `Cloudflare/`
+**Priority:** MEDIUM — do after login fixed
+**Status:** Not audited — potential security issues, SSO accidentally pushed
+**Scope:**
+- Review all Workers for security issues
+- Check mTLS configuration — likely causing cert picker problem
+- Verify Zero Trust login customization still intact
+- Bot testing and analytics (lower priority, can use free Cloudflare features)
+- Review R2/D1 access controls
+**Note:** Full Cloudflare API access available. Do NOT touch iCloud email passthrough (will.i.bracken@icloud.com)
+**Next step:** After login fixed, run full audit
+
+---
+
+### 19. Ubuntu WSL Rebuild + SSH Config Recovery
+**Repo:** `WSL_Docker/`
+**Priority:** MEDIUM — needed for n8n and Docker workflows
+**Status:** Ubuntu unregistered/deleted (confirmed this session) — was removed, possibly by Docker Desktop update or agent action
+**Lost config:**
+- SSH keys (need to regenerate or recover from backup)
+- Custom configuration primarily for n8n
+- Any WSL-specific Docker network settings
+**Definition of done:**
+- [ ] Ubuntu reinstalled (`wsl --install -d Ubuntu`)
+- [ ] SSH keys regenerated and added to GitHub + any servers
+- [ ] n8n-specific WSL config restored
+- [ ] cloudflared tunnel configured in WSL (NordVPN compatibility)
+- [ ] Docker Desktop WSL integration re-enabled for Ubuntu
+**Next step:** `wsl --install -d Ubuntu` then restore SSH and n8n config
+
+---
+
+### 20. OpenRouter Bot Configuration
+**Repo:** `AI_Agent_Skills/agents/` or `Cloudflare/workers/`
+**Priority:** HIGH — just finished building today
+**Status:** Bots built in OpenRouter today — location unclear
+**Note:** Will built bots in OpenRouter that just completed. Need to:
+- Find where they're configured (OpenRouter dashboard or local config)
+- Integrate with existing ai-router tier system in Cloudflare
+- Connect to n8n workflows
+**Next step:** Check https://openrouter.ai/settings — find the completed bots, then integrate
+
