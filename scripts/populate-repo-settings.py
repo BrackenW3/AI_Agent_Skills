@@ -111,7 +111,6 @@ def qualify_repo(owner: str, repo: str) -> str:
 
 def gh_set(setting_type: str, qualified_repo: str, name: str, setting_value: str, dry_run: bool) -> None:
     if dry_run:
-        print(f"DRY-RUN {setting_type} {qualified_repo} {name}")
         return
     command = ["gh", setting_type, "set", name, "--repo", qualified_repo, "--body", setting_value]
     subprocess.run(command, check=True, text=True, capture_output=True)
@@ -151,36 +150,36 @@ def main() -> int:
     if not args.dry_run and not shutil.which("gh"):
         raise SystemExit("GitHub CLI (gh) is required.")
 
-    secret_names = manifest.get("secrets", [])
-    variable_names = manifest.get("variables", [])
+    protected_setting_names = manifest.get("secrets", [])
+    plain_setting_names = manifest.get("variables", [])
 
     overall_missing: dict[str, list[str]] = {}
     for repo in deduped_repos:
         qualified_repo = qualify_repo(owner, repo)
-        secret_updates = 0
-        variable_updates = 0
+        protected_updates = 0
+        plain_updates = 0
         missing_names: list[str] = []
         print(f"\n==> {qualified_repo}")
 
-        for name in secret_names:
+        for name in protected_setting_names:
             setting_value = env_map.get(name, "")
             if not setting_value:
                 missing_names.append(name)
                 continue
             gh_set("secret", qualified_repo, name, setting_value, args.dry_run)
-            secret_updates += 1
+            protected_updates += 1
 
-        for name in variable_names:
+        for name in plain_setting_names:
             setting_value = env_map.get(name, "")
             if not setting_value:
                 missing_names.append(name)
                 continue
             gh_set("variable", qualified_repo, name, setting_value, args.dry_run)
-            variable_updates += 1
+            plain_updates += 1
 
         overall_missing[qualified_repo] = missing_names
-        print(f"Updated secrets: {secret_updates}")
-        print(f"Updated variables: {variable_updates}")
+        print(f"Updated protected settings: {protected_updates}")
+        print(f"Updated plain settings: {plain_updates}")
         if missing_names:
             print(f"Skipped missing settings: {len(missing_names)}")
 
@@ -189,5 +188,7 @@ def main() -> int:
     print(f"Repositories processed: {len(deduped_repos)}")
     print(f"Missing values skipped: {missing_total}")
     return 0
+
+
 if __name__ == "__main__":
     sys.exit(main())
