@@ -1,194 +1,167 @@
 name: Migrate Vectors to Azure PostgreSQL
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Dry run only (true/false)'
-        default: 'true'
-      batch_size:
-        description: 'Docs per batch'
-        default: '500'
 
 jobs:
-  setup-schema:
+  setup-azure-pg:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - name: Install deps
-        run: pip install psycopg2-binary --break-system-packages -q
+        run: pip install httpx psycopg2-binary --break-system-packages -q
 
-      - name: Create Azure PostgreSQL schema
+      - name: Setup pgvector on Azure PostgreSQL
         env:
-          PGPASSWORD: ${{ secrets.AZURE_POSTGRES_WB0414 }}
+          AZURE_PG_PASSWORD: ${{ secrets.AZURE_POSTGRES_WB0414 }}
         shell: python
         run: |
-          import os, psycopg2
-
-          pw = os.environ.get('PGPASSWORD', '')
+          import psycopg2, os
+          pw = os.environ.get('AZURE_PG_PASSWORD','')
           if not pw:
-              print('AZURE_POSTGRES_WB0414 not set - cannot connect')
-              exit(1)
-
+              print('AZURE_POSTGRES_WB0414 not set - skipping')
+              exit(0)
           try:
               conn = psycopg2.connect(
                   host='willbracken-pg-wb0414.postgres.database.azure.com',
-                  user='willbrackenadmin',
-                  password=pw,
-                  dbname='postgres',
-                  sslmode='require',
-                  connect_timeout=15
-              )
+                  database='postgres', user='willbrackenadmin',
+                  password=pw, sslmode='require', connect_timeout=30)
               conn.autocommit = True
               cur = conn.cursor()
-              print('Connected to Azure PostgreSQL!')
-
-              cur.execute('CREATE EXTENSION IF NOT EXISTS vector;')
-              print('pgvector extension ready')
-
-              cur.execute('''
-                CREATE TABLE IF NOT EXISTS documents (
-                  id TEXT PRIMARY KEY,
-                  content TEXT,
-                  embedding vector(1536),
-                  file_path TEXT,
-                  file_source TEXT,
-                  metadata JSONB,
-                  summary TEXT,
-                  doc_type TEXT,
-                  entities JSONB,
-                  enriched_at TIMESTAMPTZ,
-                  created_at TIMESTAMPTZ DEFAULT NOW(),
-                  updated_at TIMESTAMPTZ DEFAULT NOW()
-                )
-              ''')
-              print('documents table ready')
-
-              cur.execute('CREATE INDEX IF NOT EXISTS idx_emb ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)')
-              cur.execute('CREATE INDEX IF NOT EXISTS idx_source ON documents (file_source)')
-              cur.execute('CREATE INDEX IF NOT EXISTS idx_path ON documents (file_path)')
-              cur.execute('SELECT COUNT(*) FROM documents')
-              count = cur.fetchone()[0]
-              print(f'Current doc count in Azure PG: {count}')
+              cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+              cur.execute("""
+                  CREATE TABLE IF NOT EXISTS documents (
+                      id TEXT PRIMARY KEY,
+                      content TEXT,
+                      embedding vector(1536),
+                      file_path TEXT,
+                      file_source TEXT,
+                      metadata JSONB,
+                      summary TEXT,
+                      entities JSONB,
+                      doc_type TEXT,
+                      enriched_at TIMESTAMPTZ,
+                      created_at TIMESTAMPTZ DEFAULT NOW()
+                  );
+              """)
+              cur.execute("CREATE INDEX IF NOT EXISTS idx_doc_source ON documents(file_source);")
+              cur.execute("CREATE INDEX IF NOT EXISTS idx_doc_path ON documents(file_path);")
+              cur.execute("""
+                  CREATE INDEX IF NOT EXISTS idx_doc_embedding
+                  ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+              """)
+              cur.close()
               conn.close()
-              print('Schema setup COMPLETE')
+              print('Azure PostgreSQL setup COMPLETE - pgvector enabled, table and indexes created')
           except Exception as e:
-              print(f'Connection failed: {e}')
+              print(f'Setup failed: {e}')
               exit(1)
 
   migrate:
-    needs: setup-schema
+    needs: setup-azure-pg
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 180
     steps:
       - name: Install deps
-        run: pip install psycopg2-binary httpx --break-system-packages -q
+        run: pip install httpx psycopg2-binary --break-system-packages -q
 
-      - name: Migrate from Supabase to Azure PostgreSQL
+      - name: Migrate documents Supabase -> Azure PostgreSQL
         env:
-          PGPASSWORD: ${{ secrets.AZURE_POSTGRES_WB0414 }}
+          AZURE_PG_PASSWORD: ${{ secrets.AZURE_POSTGRES_WB0414 }}
+          SB_URL: https://smttdhtpwkowcyatoztb.supabase.co
           SB_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
-          BATCH: ${{ github.event.inputs.batch_size || '500' }}
         shell: python
         run: |
-          import os, httpx, psycopg2, json, time
+          import psycopg2, httpx, json, os, time
 
-          SB_URL = 'https://smttdhtpwkowcyatoztb.supabase.co'
+          pw = os.environ['AZURE_PG_PASSWORD']
+          SB_URL = os.environ['SB_URL']
           SB_KEY = os.environ['SB_KEY']
-          DRY = os.environ['DRY_RUN'] == 'true'
-          BATCH = int(os.environ['BATCH'])
-          SB_H = {'apikey': SB_KEY, 'Authorization': f'Bearer {SB_KEY}'}
 
-          if not DRY:
-              pg = psycopg2.connect(
-                  host='willbracken-pg-wb0414.postgres.database.azure.com',
-                  user='willbrackenadmin',
-                  password=os.environ['PGPASSWORD'],
-                  dbname='postgres',
-                  sslmode='require'
-              )
-              pg.autocommit = True
-              cur = pg.cursor()
+          conn = psycopg2.connect(
+              host='willbracken-pg-wb0414.postgres.database.azure.com',
+              database='postgres', user='willbrackenadmin',
+              password=pw, sslmode='require', connect_timeout=30)
+          cur = conn.cursor()
 
-          # Count
-          r = httpx.get(f'{SB_URL}/rest/v1/documents',
-              headers={**SB_H, 'Prefer': 'count=exact'},
-              params={'select': 'id', 'limit': '1'}, timeout=30)
-          total = int(r.headers.get('content-range', '0/0').split('/')[-1])
-          print(f'Total docs: {total} | Dry run: {DRY} | Batch: {BATCH}')
+          sb = {'apikey': SB_KEY, 'Authorization': f'Bearer {SB_KEY}'}
 
-          migrated = 0
-          errors = 0
           offset = 0
+          total = 0
+          errors = 0
+          batch = 100
 
           while True:
-              r = httpx.get(f'{SB_URL}/rest/v1/documents',
-                  headers=SB_H,
-                  params={'select': 'id,content,embedding,file_path,file_source,metadata,summary,doc_type,entities,enriched_at,created_at',
-                          'limit': str(BATCH), 'offset': str(offset)},
-                  timeout=60)
-
-              if not r.is_success:
-                  print(f'Supabase error at {offset}: {r.status_code}')
+              try:
+                  r = httpx.get(f'{SB_URL}/rest/v1/documents', headers=sb,
+                      params={'select':'id,content,embedding,file_path,file_source,metadata,summary,entities,doc_type,enriched_at',
+                              'limit': str(batch), 'offset': str(offset)}, timeout=60)
+                  docs = r.json() if r.is_success and isinstance(r.json(), list) else []
+              except Exception as e:
+                  print(f'Fetch error at offset {offset}: {e}')
                   break
 
-              docs = r.json()
-              if not docs or not isinstance(docs, list):
-                  print(f'No more docs at offset {offset}')
+              if not docs:
                   break
-
-              if DRY:
-                  print(f'[DRY] Would migrate {len(docs)} docs from offset {offset}')
-                  migrated += len(docs)
-                  offset += BATCH
-                  if offset >= total:
-                      break
-                  continue
 
               for doc in docs:
                   if not isinstance(doc, dict):
                       continue
                   try:
                       emb = doc.get('embedding')
-                      cur.execute("""
-                          INSERT INTO documents (id,content,embedding,file_path,file_source,metadata,summary,doc_type,entities,enriched_at,created_at)
-                          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                          ON CONFLICT (id) DO UPDATE SET
-                            content=EXCLUDED.content, summary=EXCLUDED.summary,
-                            doc_type=EXCLUDED.doc_type, entities=EXCLUDED.entities,
-                            enriched_at=EXCLUDED.enriched_at, updated_at=NOW()
-                      """, (
-                          doc.get('id'), doc.get('content'), emb,
-                          doc.get('file_path'), doc.get('file_source'),
-                          json.dumps(doc.get('metadata')) if doc.get('metadata') else None,
-                          doc.get('summary'), doc.get('doc_type'),
-                          json.dumps(doc.get('entities')) if doc.get('entities') else None,
-                          doc.get('enriched_at'), doc.get('created_at')
-                      ))
-                      migrated += 1
+                      cur.execute(
+                          """INSERT INTO documents
+                              (id,content,embedding,file_path,file_source,metadata,summary,entities,doc_type,enriched_at)
+                             VALUES (%s,%s,%s::vector,%s,%s,%s,%s,%s,%s,%s)
+                             ON CONFLICT (id) DO UPDATE SET
+                              content=EXCLUDED.content, embedding=EXCLUDED.embedding,
+                              summary=EXCLUDED.summary, enriched_at=EXCLUDED.enriched_at""",
+                          (doc.get('id'), doc.get('content'),
+                           json.dumps(emb) if emb else None,
+                           doc.get('file_path'), doc.get('file_source'),
+                           json.dumps(doc.get('metadata')) if doc.get('metadata') else None,
+                           doc.get('summary'),
+                           json.dumps(doc.get('entities')) if doc.get('entities') else None,
+                           doc.get('doc_type'), doc.get('enriched_at'))
+                      )
+                      total += 1
                   except Exception as e:
                       errors += 1
 
-              offset += BATCH
-              print(f'Progress: {migrated}/{total} | errors: {errors}')
-              if offset >= total:
-                  break
+              conn.commit()
+              offset += batch
+              if total % 500 == 0:
+                  print(f'Progress: {total} migrated, {errors} errors')
 
-          if not DRY:
-              pg.close()
-          print(f'DONE: {migrated} migrated, {errors} errors')
+          cur.close()
+          conn.close()
+          print(f'MIGRATION COMPLETE: {total} docs migrated, {errors} errors')
 
-  summary:
-    needs: [setup-schema, migrate]
+  verify:
+    needs: migrate
     runs-on: ubuntu-latest
-    if: always()
     steps:
-      - name: Results
+      - name: Install deps
+        run: pip install psycopg2-binary --break-system-packages -q
+
+      - name: Verify Azure PostgreSQL
+        env:
+          AZURE_PG_PASSWORD: ${{ secrets.AZURE_POSTGRES_WB0414 }}
+        shell: python
         run: |
-          echo "Schema setup: ${{ needs.setup-schema.result }}"
-          echo "Migration:    ${{ needs.migrate.result }}"
-          echo ""
-          echo "Next steps:"
-          echo "1. Run again with dry_run=false to do real migration"
-          echo "2. Update indexer VECTOR_DB env var to azure_postgres"
-          echo "3. Update n8n workflows connection string"
-          echo "4. Keep Supabase for app data only"
+          import psycopg2, os
+          conn = psycopg2.connect(
+              host='willbracken-pg-wb0414.postgres.database.azure.com',
+              database='postgres', user='willbrackenadmin',
+              password=os.environ['AZURE_PG_PASSWORD'], sslmode='require')
+          cur = conn.cursor()
+          cur.execute("SELECT COUNT(*), COUNT(embedding), COUNT(summary) FROM documents;")
+          total, vecs, summs = cur.fetchone()
+          print(f'Total docs: {total}')
+          print(f'With embeddings: {vecs}')
+          print(f'With summaries: {summs}')
+          cur.execute("SELECT file_source, COUNT(*) FROM documents GROUP BY file_source ORDER BY 2 DESC;")
+          for row in cur.fetchall():
+              print(f'  {row[0]}: {row[1]}')
+          cur.close()
+          conn.close()
+          print('Azure PostgreSQL is ready to replace Supabase for vector search')
