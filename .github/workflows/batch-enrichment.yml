@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Enrich documents
+      - name: Enrich documents with GPT-4o-mini
         env:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           SUPABASE_URL: https://smttdhtpwkowcyatoztb.supabase.co
@@ -16,39 +16,36 @@ jobs:
         run: |
           pip install httpx -q
           python3 -c "
-import os, httpx, time, json
+import os, httpx, time
 
 URL = os.environ['SUPABASE_URL']
 KEY = os.environ['SUPABASE_API_KEY']
 AZ_KEY = os.environ['AZURE_OPENAI_API_KEY']
 AZ_EP = 'https://willbracken-aoai-ihe42a.openai.azure.com/'
-AZ_VER = '2025-01-01-preview'
 
 headers = {'apikey': KEY, 'Authorization': f'Bearer {KEY}'}
-
-# Get unenriched docs in batches
+total = 0
 offset = 0
-total_enriched = 0
+
 while True:
     r = httpx.get(f'{URL}/rest/v1/documents',
         headers=headers,
-        params={'select': 'id,content,file_path', 'summary': 'is.null',
-                'limit': '100', 'offset': str(offset)},
+        params={'select': 'id,content', 'summary': 'is.null', 'limit': '200', 'offset': str(offset)},
         timeout=30)
     docs = r.json() if r.is_success else []
     if not docs:
+        print(f'Done. Total enriched: {total}')
         break
-    
     for doc in docs:
         content = doc.get('content', '')
         if len(content) < 100:
             continue
         try:
             resp = httpx.post(
-                f'{AZ_EP}openai/deployments/gpt-4o-mini/chat/completions?api-version={AZ_VER}',
+                f'{AZ_EP}openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview',
                 headers={'api-key': AZ_KEY},
                 json={'messages': [
-                    {'role': 'system', 'content': 'Summarize in 1-2 sentences. Include: topic, type, key terms.'},
+                    {'role': 'system', 'content': 'Summarize in 1-2 sentences. Include topic and document type.'},
                     {'role': 'user', 'content': content[:2000]}
                 ], 'max_tokens': 100, 'temperature': 0},
                 timeout=20)
@@ -56,15 +53,13 @@ while True:
                 summary = resp.json()['choices'][0]['message']['content']
                 httpx.patch(f'{URL}/rest/v1/documents',
                     headers={**headers, 'Content-Type': 'application/json'},
-                    params={'id': f\"eq.{doc['id']}\"},
+                    params={'id': f'eq.{doc["id"]}'},
                     json={'summary': summary}, timeout=10)
-                total_enriched += 1
-                if total_enriched % 100 == 0:
-                    print(f'Enriched: {total_enriched}')
+                total += 1
+                if total % 100 == 0:
+                    print(f'Enriched: {total}')
                 time.sleep(0.05)
-        except Exception as e:
+        except:
             pass
-    offset += 100
-
-print(f'Total enriched: {total_enriched}')
+    offset += 200
 "
