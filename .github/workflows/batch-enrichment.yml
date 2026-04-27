@@ -1,0 +1,70 @@
+name: Batch Enrichment
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Enrich documents
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          SUPABASE_URL: https://smttdhtpwkowcyatoztb.supabase.co
+          SUPABASE_API_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          pip install httpx -q
+          python3 -c "
+import os, httpx, time, json
+
+URL = os.environ['SUPABASE_URL']
+KEY = os.environ['SUPABASE_API_KEY']
+AZ_KEY = os.environ['AZURE_OPENAI_API_KEY']
+AZ_EP = 'https://willbracken-aoai-ihe42a.openai.azure.com/'
+AZ_VER = '2025-01-01-preview'
+
+headers = {'apikey': KEY, 'Authorization': f'Bearer {KEY}'}
+
+# Get unenriched docs in batches
+offset = 0
+total_enriched = 0
+while True:
+    r = httpx.get(f'{URL}/rest/v1/documents',
+        headers=headers,
+        params={'select': 'id,content,file_path', 'summary': 'is.null',
+                'limit': '100', 'offset': str(offset)},
+        timeout=30)
+    docs = r.json() if r.is_success else []
+    if not docs:
+        break
+    
+    for doc in docs:
+        content = doc.get('content', '')
+        if len(content) < 100:
+            continue
+        try:
+            resp = httpx.post(
+                f'{AZ_EP}openai/deployments/gpt-4o-mini/chat/completions?api-version={AZ_VER}',
+                headers={'api-key': AZ_KEY},
+                json={'messages': [
+                    {'role': 'system', 'content': 'Summarize in 1-2 sentences. Include: topic, type, key terms.'},
+                    {'role': 'user', 'content': content[:2000]}
+                ], 'max_tokens': 100, 'temperature': 0},
+                timeout=20)
+            if resp.is_success:
+                summary = resp.json()['choices'][0]['message']['content']
+                httpx.patch(f'{URL}/rest/v1/documents',
+                    headers={**headers, 'Content-Type': 'application/json'},
+                    params={'id': f\"eq.{doc['id']}\"},
+                    json={'summary': summary}, timeout=10)
+                total_enriched += 1
+                if total_enriched % 100 == 0:
+                    print(f'Enriched: {total_enriched}')
+                time.sleep(0.05)
+        except Exception as e:
+            pass
+    offset += 100
+
+print(f'Total enriched: {total_enriched}')
+"
