@@ -1,0 +1,122 @@
+name: Migrate Vectors to Azure PostgreSQL
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Open firewall for runner
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "Runner IP: $RUNNER_IP"
+          az postgres flexible-server firewall-rule create \
+            --resource-group willbracken-free-rg \
+            --name willbracken-pg-wb0414 \
+            --rule-name GHActionsRunner \
+            --start-ip-address $RUNNER_IP \
+            --end-ip-address $RUNNER_IP 2>&1 | tail -3 || true
+          az postgres server firewall-rule create \
+            --resource-group willbracken-free-rg \
+            --server-name willbracken-pg-wb0414 \
+            --name GHActionsRunner \
+            --start-ip-address $RUNNER_IP \
+            --end-ip-address $RUNNER_IP 2>&1 | tail -3 || true
+          sleep 10
+
+      - name: Install deps
+        run: pip install httpx psycopg2-binary --break-system-packages -q
+
+      - name: Run migration
+        env:
+          PG_PASSWORD: ${{ secrets.AZURE_POSTGRES_WB0414 }}
+          SB_URL: https://smttdhtpwkowcyatoztb.supabase.co
+          SB_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        shell: python
+        run: |
+          import psycopg2, httpx, json, os, time
+
+          pw = os.environ['PG_PASSWORD']
+          SB_URL = os.environ['SB_URL']
+          SB_KEY = os.environ['SB_KEY']
+          print(f'Password length: {len(pw)} chars')
+
+          try:
+              conn = psycopg2.connect(
+                  host='willbracken-pg-wb0414.postgres.database.azure.com',
+                  database='postgres', user='willbrackenadmin',
+                  password=pw, sslmode='require', connect_timeout=30)
+              print('Connected to Azure PostgreSQL')
+          except Exception as e:
+              print(f'Connection failed: {e}')
+              exit(1)
+
+          conn.autocommit = True
+          cur = conn.cursor()
+          cur.execute('CREATE EXTENSION IF NOT EXISTS vector;')
+          cur.execute('CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, content TEXT, embedding vector(1536), file_path TEXT, file_source TEXT, metadata JSONB, summary TEXT, entities JSONB, doc_type TEXT, enriched_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW());')
+          cur.execute('CREATE INDEX IF NOT EXISTS idx_doc_source ON documents(file_source);')
+          cur.execute('CREATE INDEX IF NOT EXISTS idx_doc_path ON documents(file_path);')
+          print('Schema ready')
+
+          conn.autocommit = False
+          cur2 = conn.cursor()
+          sb = {'apikey': SB_KEY, 'Authorization': f'Bearer {SB_KEY}'}
+          offset, total, errors = 0, 0, 0
+          start = time.time()
+
+          while True:
+              r = httpx.get(f'{SB_URL}/rest/v1/documents', headers=sb,
+                  params={'select':'id,content,embedding,file_path,file_source,metadata,summary,entities,doc_type,enriched_at','limit':'200','offset':str(offset)}, timeout=60)
+              docs = r.json() if r.is_success and isinstance(r.json(), list) else []
+              if not docs:
+                  break
+              for doc in docs:
+                  if not isinstance(doc, dict):
+                      continue
+                  try:
+                      emb = doc.get('embedding')
+                      cur2.execute(
+                          'INSERT INTO documents (id,content,embedding,file_path,file_source,metadata,summary,entities,doc_type,enriched_at) VALUES (%s,%s,%s::vector,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET content=EXCLUDED.content,embedding=EXCLUDED.embedding,summary=EXCLUDED.summary,enriched_at=EXCLUDED.enriched_at',
+                          (doc.get('id'),doc.get('content'),json.dumps(emb) if emb else None,doc.get('file_path'),doc.get('file_source'),json.dumps(doc.get('metadata')) if doc.get('metadata') else None,doc.get('summary'),json.dumps(doc.get('entities')) if doc.get('entities') else None,doc.get('doc_type'),doc.get('enriched_at')))
+                      total += 1
+                  except Exception as e:
+                      errors += 1
+              conn.commit()
+              offset += 200
+              elapsed = time.time() - start
+              rate = total/max(elapsed,1)
+              eta = (34977-total)/max(rate,1)/60
+              print(f'Progress: {total}/34977 | ETA: {eta:.0f}m | errors: {errors}', flush=True)
+
+          cur2.close()
+          conn.close()
+          print(f'MIGRATION COMPLETE: {total} docs, {errors} errors, {(time.time()-start)/60:.1f}min')
+
+      - name: Verify and close firewall
+        run: |
+          pip install psycopg2-binary -q
+          python3 -c "
+import psycopg2, os, subprocess
+pw = os.environ.get('PG_PASSWORD') or '${{ secrets.AZURE_POSTGRES_WB0414 }}'
+try:
+    conn = psycopg2.connect(host='willbracken-pg-wb0414.postgres.database.azure.com',database='postgres',user='willbrackenadmin',password=pw,sslmode='require')
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*), COUNT(embedding) FROM documents;')
+    total, vecs = cur.fetchone()
+    print(f'Azure PG: {total} docs, {vecs} with embeddings')
+    conn.close()
+except Exception as e:
+    print(f'Verify error: {e}')
+"
+          az postgres flexible-server firewall-rule delete --resource-group willbracken-free-rg --name willbracken-pg-wb0414 --rule-name GHActionsRunner --yes 2>/dev/null || true
+          az postgres server firewall-rule delete --resource-group willbracken-free-rg --server-name willbracken-pg-wb0414 --name GHActionsRunner --yes 2>/dev/null || true
+          echo "Migration done - Supabase can be cleaned up after verification"
+        env:
+          PG_PASSWORD: ${{ secrets.AZURE_POSTGRES_WB0414 }}
