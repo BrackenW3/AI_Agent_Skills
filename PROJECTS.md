@@ -154,3 +154,33 @@
 5. Claude CLI interactive mode (trace complete, gh.exe fix applied)
 6. iDrive cleanup
 7. Check LoRA fine-tune status
+
+
+---
+
+### 24. Fix Cloud Storage Flow (iCloud/Google/OneDrive)
+**Status:** 🔄 Planned
+**Problem:** iCloud -> downloads locally -> re-uploads to Google Drive -> downloads again -> re-uploads to Azure. Wasteful, causes constant popups.
+**Fix:**
+- iCloud stays in iCloud OR syncs direct to OneDrive (Microsoft-to-Microsoft)
+- Google Drive indexed directly via Google Drive API (no local download)
+- OneDrive indexed directly via Microsoft Graph API (no local download)
+- All cloud indexing runs on Azure Container Job - zero local involvement
+- **Cloud Indexer already built** in scripts/vector-search/cloud_indexer.py
+- Needs: GDRIVE_SERVICE_ACCOUNT_JSON + Graph API permissions set up
+
+### 25. Container Apps - LiteLLM / LangFuse / Metabase
+**Status:** ✅ Deployed
+**URLs:**
+- LiteLLM: https://litellm.orangegrass-ad6d20d5.eastus.azurecontainerapps.io
+- LangFuse: https://langfuse.orangegrass-ad6d20d5.eastus.azurecontainerapps.io  
+- Metabase: https://metabase.orangegrass-ad6d20d5.eastus.azurecontainerapps.io
+**Custom domains (DNS only):**
+- https://litellm.willbracken.com
+- https://langfuse.willbracken.com
+- https://analytics.willbracken.com
+**Credentials:**
+- LangFuse: will@willbracken.com / WillBracken2026!
+- LiteLLM key: sk-wb-litellm-master
+- Metabase: setup on first visit
+**Note:** Cold start takes 30-60s from 0 replicas
