@@ -1,4 +1,4 @@
-name: Migrate Vectors to Azure PostgreSQL
+name: Migrate Vectors to Azure PostgreSQL v2
 on:
   workflow_dispatch:
 
