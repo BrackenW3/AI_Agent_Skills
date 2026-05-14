@@ -1,0 +1,6 @@
+
+Title: 🔒 fix: Remove accidentally committed .env file with secrets
+Description:
+🎯 **What:** Removed the `.env` file that was accidentally committed in commit `909d856`. The `.env` file is already listed in `.gitignore` but must be removed from git caching to stop tracking it.
+⚠️ **Risk:** Critical security risk. The file contained live API keys and secrets for numerous services including OpenAI, Anthropic, Mistral, GitHub, Cloudflare, Azure, and others. If left unfixed, these credentials could be compromised and used maliciously, leading to data breaches or financial loss.
+🛡️ **Solution:** Used `git rm --cached .env` to remove the file from git tracking without deleting it from the local disk, thereby ensuring it remains ignored by git via `.gitignore` in future commits while safely removing the secrets from the repository tree.
