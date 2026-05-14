@@ -22,18 +22,13 @@ import os
 import sys
 import json
 import argparse
-import hashlib
 from collections import defaultdict
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from google.auth.transport.requests import Request
-from google.oauth2.service_account import Credentials
 from google.oauth2.credentials import Credentials as UserCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.exceptions import DefaultCredentialsError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -116,7 +111,7 @@ class CleanupReport:
             f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"\nTotal Files: {self.total_files}",
             f"Total Size: {self._format_bytes(self.total_size)}",
-            f"\n--- DUPLICATES ---",
+            "\n--- DUPLICATES ---",
             f"Duplicate Files: {self.duplicate_count}",
             f"Space Wasted: {self._format_bytes(self.duplicate_space_waste)}",
         ]
@@ -126,11 +121,10 @@ class CleanupReport:
             for key, files in sorted(self.duplicates.items()):
                 if len(files) > 1:
                     lines.append(f"  {key} ({files[0].format_size()})")
-                    for f in files:
-                        lines.append(f"    - {f.name} (id: {f.id[:8]}...)")
+                    lines.extend([f"    - {f.name} (id: {f.id[:8]}...)" for f in files])
 
         lines.extend([
-            f"\n--- JUNK FILES ---",
+            "\n--- JUNK FILES ---",
             f"Junk Files Found: {self.junk_file_count}",
             f"Space Wasted: {self._format_bytes(self.junk_space_waste)}",
         ])
@@ -143,7 +137,7 @@ class CleanupReport:
                 lines.append(f"  ... and {len(self.junk_files) - 20} more")
 
         lines.extend([
-            f"\n--- RECOMMENDED FOLDER STRUCTURE ---",
+            "\n--- RECOMMENDED FOLDER STRUCTURE ---",
             "Personal/",
             "  ├── Email/",
             "  ├── Images/",
