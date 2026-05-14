@@ -16,10 +16,7 @@ import os
 import sys
 import json
 import argparse
-import time
-from collections import defaultdict
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -439,7 +436,6 @@ class DrivePartitionManager:
             print("ERROR: Could not set up partition folders")
             return
         
-        total_files_to_move = len(report.personal_files) + len(report.data_files)
         moved_count = 0
         failed_count = 0
         
@@ -447,11 +443,11 @@ class DrivePartitionManager:
         for file_info in report.personal_files:
             # Determine specific subfolder
             lower_name = file_info.name.lower()
-            if any(p in lower_name for p in ["photo", "image", "picture", "jpeg", "png"]):
+            if any(p in lower_name for p in {"photo", "image", "picture", "jpeg", "png"}):
                 dest_folder = folder_ids.get("Personal/Photos")
-            elif any(p in lower_name for p in ["backup", "bak"]):
+            elif any(p in lower_name for p in {"backup", "bak"}):
                 dest_folder = folder_ids.get("Personal/Backups")
-            elif any(p in lower_name for p in ["email", "eml", "mbox"]):
+            elif any(p in lower_name for p in {"email", "eml", "mbox"}):
                 dest_folder = folder_ids.get("Personal/Email")
             else:
                 dest_folder = folder_ids.get("Personal/Documents")
