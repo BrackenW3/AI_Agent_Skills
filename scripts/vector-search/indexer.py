@@ -17,7 +17,6 @@ import logging
 import sqlite3
 import time
 import os
-import sys
 import argparse
 from datetime import datetime, timezone
 from pathlib import Path
@@ -340,12 +339,12 @@ class IndexingPipeline:
 
                     logger.info(f"[{total_count}] Processing: {file_path}")
 
-                    text = FileProcessor.extract_text_from_file(file_path)
+                    text = await asyncio.to_thread(FileProcessor.extract_text_from_file, file_path)
                     if not text:
                         error_count += 1
                         continue
 
-                    chunks = self.chunker.chunk_text(text)
+                    chunks = await asyncio.to_thread(self.chunker.chunk_text, text)
                     if not chunks:
                         error_count += 1
                         continue
