@@ -121,7 +121,7 @@ class CleanupReport:
             for key, files in sorted(self.duplicates.items()):
                 if len(files) > 1:
                     lines.append(f"  {key} ({files[0].format_size()})")
-                    lines.extend([f"    - {f.name} (id: {f.id[:8]}...)" for f in files])
+                    lines.extend(f"    - {f.name} (id: {f.id[:8]}...)" for f in files)
 
         lines.extend([
             "\n--- JUNK FILES ---",
